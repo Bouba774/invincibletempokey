@@ -238,6 +238,23 @@ export function getSafUri(file: File | undefined | null): string | null {
   return typeof v === "string" ? v : null;
 }
 
+export async function getSafPlayableUrl(
+  file: File,
+): Promise<{ url: string; mime: string } | null> {
+  const uri = getSafUri(file);
+  if (!uri) return null;
+  const meta = getSafMeta(file);
+  const res = await FolderPicker.getPlayableUri({
+    uri,
+    name: file.name || meta?.name,
+    mime: file.type || meta?.mime,
+  });
+  return {
+    url: Capacitor.convertFileSrc?.(res.uri) ?? res.uri,
+    mime: res.mime || file.type || meta?.mime || "",
+  };
+}
+
 export async function pickAndroidFolder(): Promise<{
   rootName: string;
   treeUri: string;
