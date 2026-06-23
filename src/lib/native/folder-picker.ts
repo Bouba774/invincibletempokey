@@ -14,6 +14,7 @@ export interface SafFileMeta {
 export interface FolderPickerPlugin {
   checkAudioPermission(): Promise<{ state: "granted" | "denied" | "blocked" | "unsupported" }>;
   requestAudioPermission(): Promise<{ state: "granted" | "denied" | "blocked" | "unsupported" }>;
+  openAppSettings(): Promise<{ opened: boolean }>;
   pickFolder(): Promise<{ treeUri: string; name: string }>;
   listAudioFiles(opts: { treeUri: string }): Promise<{
     rootName: string;
