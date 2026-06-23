@@ -405,6 +405,7 @@ public class FolderPickerPlugin extends Plugin {
         String uriStr = call.getString("uri");
         String name = call.getString("name", "audio");
         String mime = call.getString("mime", "");
+        long expectedSize = call.getLong("size", -1L);
         if (uriStr == null) { call.reject("MISSING_URI"); return; }
         InputStream is = null;
         FileOutputStream os = null;
@@ -424,11 +425,13 @@ public class FolderPickerPlugin extends Plugin {
             File dir = new File(getContext().getCacheDir(), "tempokey-audio");
             if (!dir.exists()) dir.mkdirs();
             File out = new File(dir, hash + "-" + safe);
-            os = new FileOutputStream(out, false);
-            byte[] chunk = new byte[128 * 1024];
-            int n;
-            while ((n = is.read(chunk)) > 0) os.write(chunk, 0, n);
-            os.flush();
+            if (!out.exists() || out.length() == 0L || (expectedSize > 0L && out.length() != expectedSize)) {
+                os = new FileOutputStream(out, false);
+                byte[] chunk = new byte[128 * 1024];
+                int n;
+                while ((n = is.read(chunk)) > 0) os.write(chunk, 0, n);
+                os.flush();
+            }
 
             JSObject ret = new JSObject();
             ret.put("uri", Uri.fromFile(out).toString());
