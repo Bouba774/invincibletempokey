@@ -231,9 +231,9 @@ export function estimateBPM(samples: Float32Array, sampleRate: number): BpmEstim
   let bestVarScore = -Infinity;
   for (const b of variants) {
     if (b < MIN_BPM || b > MAX_BPM) continue;
-    const dist = (b - 125) / 60;
-    const prior = Math.exp(-0.5 * dist * dist);
-    const inside = b >= DJ_PREF_MIN && b <= DJ_PREF_MAX ? 1.0 : 0.7;
+    const logDist = Math.log(b / 120);
+    const prior = Math.exp(-0.5 * (logDist / 0.55) * (logDist / 0.55));
+    const inside = b >= DJ_PREF_MIN && b <= DJ_PREF_MAX ? 1.0 : 0.75;
     // Reuse the comb score of the nearest lag.
     const lag = Math.max(minLag, Math.min(maxLag, Math.round((60 * rate) / b)));
     let s = 0;
