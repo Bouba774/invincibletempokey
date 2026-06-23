@@ -122,6 +122,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.DocumentsContract;
+import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.MimeTypeMap;
 import androidx.activity.result.ActivityResult;
@@ -214,6 +215,21 @@ public class FolderPickerPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("state", normalizedPermissionState());
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.fromParts("package", getContext().getPackageName(), null));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject ret = new JSObject();
+            ret.put("opened", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("OPEN_SETTINGS_FAIL", e);
+        }
     }
 
     @PluginMethod
