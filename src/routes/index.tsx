@@ -43,7 +43,6 @@ import {
 } from "@/lib/native/folder-picker";
 import { AudioPermissionDialog, type AudioPermissionDialogVariant } from "@/components/AudioPermissionDialog";
 import {
-  hasPersistedGrant,
   openAndroidAppSettings,
   requestAudioPermission,
 } from "@/lib/android-permissions";
@@ -117,13 +116,9 @@ function Home() {
   //  - Older browsers              → legacy <input webkitdirectory> fallback
   async function openFolderPicker() {
     if (isCapacitorAndroid()) {
-      if (!hasPersistedGrant()) {
-        const state = await requestAudioPermission();
-        if (state !== "granted") {
-          setPermissionDialog(state === "blocked" ? "blocked" : "denied");
-          return;
-        }
-        await openAndroidFolderAfterPermission();
+      const state = await requestAudioPermission();
+      if (state !== "granted") {
+        setPermissionDialog(state === "blocked" ? "blocked" : "denied");
         return;
       }
       await openAndroidFolderAfterPermission();
