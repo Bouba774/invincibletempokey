@@ -1,0 +1,473 @@
+#!/usr/bin/env bash
+# Prepares the Android Capacitor project from a dedicated SPA build.
+#
+# - Builds a static SPA via vite.config.capacitor.ts (output: dist/android/).
+# - Falls back to hoisting index.html if it ends up in a nested folder
+#   (different Vite versions handle rollup `input` paths slightly differently).
+# - Validates the final layout before invoking Capacitor.
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+LOGO_URL="${TEMPOKEY_LOGO_URL:-https://tempokey.lovable.app/__l5e/assets-v1/00136921-a419-4bb4-8cf6-ca6ffceafbba/tempokey-logo.png}"
+LOCAL_LOGO="src/assets/tempokey-logo.png"
+WEB_DIR="dist/android"
+RES_DIR="resources"
+
+echo "▶ Installing Capacitor toolchain (idempotent)…"
+npm install --no-audit --no-fund --save-dev \
+  @capacitor/cli@^6 \
+  @capacitor/assets@^3 >/dev/null
+npm install --no-audit --no-fund --save \
+  @capacitor/core@^6 \
+  @capacitor/android@^6 \
+  @capacitor/splash-screen@^6 \
+  @capacitor/status-bar@^6 \
+  @capacitor/app@^6 \
+  @capacitor/keyboard@^6 \
+  @capacitor/filesystem@^6 >/dev/null
+
+echo "▶ Building static SPA for WebView (vite.config.capacitor.ts)…"
+rm -rf "$WEB_DIR"
+npx vite build --config vite.config.capacitor.ts
+
+# Hoist index.html if Vite emitted it inside a nested subfolder.
+if [ ! -f "$WEB_DIR/index.html" ]; then
+  NESTED=$(find "$WEB_DIR" -maxdepth 3 -type f -name "index.html" | head -n1 || true)
+  if [ -n "$NESTED" ]; then
+    NEST_DIR=$(dirname "$NESTED")
+    echo "▶ Hoisting $NESTED → $WEB_DIR/index.html"
+    cp "$NESTED" "$WEB_DIR/index.html"
+    # Move sibling assets too if they live next to the nested index.html
+    if [ "$NEST_DIR" != "$WEB_DIR" ] && [ -d "$NEST_DIR" ]; then
+      shopt -s dotglob nullglob
+      for f in "$NEST_DIR"/*; do
+        base=$(basename "$f")
+        [ "$base" = "index.html" ] && continue
+        [ -e "$WEB_DIR/$base" ] && continue
+        mv "$f" "$WEB_DIR/"
+      done
+      shopt -u dotglob nullglob
+      rmdir "$NEST_DIR" 2>/dev/null || true
+    fi
+  fi
+fi
+
+if [ ! -f "$WEB_DIR/index.html" ]; then
+  echo "❌ Android SPA build did not produce $WEB_DIR/index.html" >&2
+  echo "Tree:" >&2
+  find "$WEB_DIR" -maxdepth 3 -type f >&2 || true
+  exit 1
+fi
+echo "✓ $WEB_DIR/index.html present"
+
+# Sanity check: the built index.html must reference real bundled assets.
+if ! grep -qE 'src="\.?/?assets/' "$WEB_DIR/index.html"; then
+  echo "❌ index.html does not reference any bundled asset — black screen guaranteed." >&2
+  cat "$WEB_DIR/index.html" >&2
+  exit 1
+fi
+echo "✓ index.html links bundled assets"
+
+echo "▶ Preparing icon & splash sources…"
+mkdir -p "$RES_DIR"
+# Prefer the bundled official logo committed in the repo. Fall back to CDN.
+if [ -f "$LOCAL_LOGO" ]; then
+  cp -f "$LOCAL_LOGO" "$RES_DIR/icon.png"
+elif [ ! -f "$RES_DIR/icon.png" ]; then
+  curl -L --silent --fail "$LOGO_URL" -o "$RES_DIR/icon.png"
+fi
+if [ ! -f "$RES_DIR/splash.png" ]; then
+  cp -f "$RES_DIR/icon.png" "$RES_DIR/splash.png"
+fi
+cp -f "$RES_DIR/icon.png" "android-resources/logo.png" 2>/dev/null || true
+
+echo "▶ Adding Android platform (if missing)…"
+if [ ! -d "android" ]; then
+  npx cap add android
+fi
+
+echo "▶ Generating launcher icons, adaptive icon & splash…"
+npx @capacitor/assets generate --android \
+  --iconBackgroundColor "#FFFFFF" \
+  --iconBackgroundColorDark "#FFFFFF" \
+  --splashBackgroundColor "#FFFFFF" \
+  --splashBackgroundColorDark "#FFFFFF" || {
+    echo "⚠ @capacitor/assets failed; continuing with platform defaults." >&2
+  }
+
+echo "▶ Syncing Capacitor…"
+npx cap sync android
+
+# ──────────────────────────────────────────────────────────────────────────
+# Install our custom Android folder-picker plugin into the gradle project.
+# Uses ACTION_OPEN_DOCUMENT_TREE + takePersistableUriPermission so users
+# pick a real Android folder through the system picker (no webkitdirectory).
+# ──────────────────────────────────────────────────────────────────────────
+PLUGIN_PKG_DIR="android/app/src/main/java/app/lovable/tempokey/folderpicker"
+if [ -d "android/app" ]; then
+  echo "▶ Installing native FolderPicker plugin…"
+  mkdir -p "$PLUGIN_PKG_DIR"
+  cat > "$PLUGIN_PKG_DIR/FolderPickerPlugin.java" <<'JAVA'
+package app.lovable.tempokey.folderpicker;
+
+import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.Intent;
+import android.content.UriPermission;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.DocumentsContract;
+import android.util.Base64;
+import androidx.activity.result.ActivityResult;
+import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+
+@CapacitorPlugin(name = "FolderPicker")
+public class FolderPickerPlugin extends Plugin {
+
+    private static final String[] AUDIO_EXT = {
+        ".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".aiff", ".aif", ".wma", ".opus"
+    };
+
+    @PluginMethod
+    public void pickFolder(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        );
+        startActivityForResult(call, intent, "handlePickResult");
+    }
+
+    @ActivityCallback
+    private void handlePickResult(PluginCall call, ActivityResult result) {
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
+            call.reject("CANCELLED");
+            return;
+        }
+        Uri treeUri = result.getData().getData();
+        if (treeUri == null) {
+            call.reject("NO_URI");
+            return;
+        }
+        int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                  | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION;
+        try {
+            getContext().getContentResolver().takePersistableUriPermission(treeUri, flags);
+        } catch (Exception ignored) {}
+
+        String name = "";
+        try {
+            Uri docUri = DocumentsContract.buildDocumentUriUsingTree(
+                treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+            );
+            Cursor c = getContext().getContentResolver().query(
+                docUri,
+                new String[] { DocumentsContract.Document.COLUMN_DISPLAY_NAME },
+                null, null, null
+            );
+            if (c != null) {
+                try { if (c.moveToFirst()) name = c.getString(0); }
+                finally { c.close(); }
+            }
+        } catch (Exception ignored) {}
+
+        JSObject ret = new JSObject();
+        ret.put("treeUri", treeUri.toString());
+        ret.put("name", name == null ? "" : name);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void listAudioFiles(PluginCall call) {
+        String treeUriStr = call.getString("treeUri");
+        if (treeUriStr == null) { call.reject("MISSING_TREE_URI"); return; }
+        Uri treeUri = Uri.parse(treeUriStr);
+        ContentResolver cr = getContext().getContentResolver();
+        String rootDocId = DocumentsContract.getTreeDocumentId(treeUri);
+
+        String rootName = "";
+        try {
+            Uri rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootDocId);
+            Cursor c = cr.query(
+                rootUri,
+                new String[] { DocumentsContract.Document.COLUMN_DISPLAY_NAME },
+                null, null, null
+            );
+            if (c != null) {
+                try { if (c.moveToFirst()) rootName = c.getString(0); }
+                finally { c.close(); }
+            }
+        } catch (Exception ignored) {}
+
+        JSArray files = new JSArray();
+        walk(cr, treeUri, rootDocId, rootName == null ? "" : rootName, files);
+
+        JSObject ret = new JSObject();
+        ret.put("rootName", rootName == null ? "" : rootName);
+        ret.put("files", files);
+        call.resolve(ret);
+    }
+
+    private void walk(
+        ContentResolver cr, Uri treeUri, String parentDocId, String relPrefix, JSArray out
+    ) {
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId);
+        String[] proj = {
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE
+        };
+        Cursor c = null;
+        try {
+            c = cr.query(children, proj, null, null, null);
+            if (c == null) return;
+            while (c.moveToNext()) {
+                String id = c.getString(0);
+                String name = c.getString(1);
+                String mime = c.getString(2);
+                long size = c.isNull(3) ? 0L : c.getLong(3);
+                if (name == null) continue;
+                String childRel = relPrefix.isEmpty() ? name : (relPrefix + "/" + name);
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                    walk(cr, treeUri, id, childRel, out);
+                } else {
+                    boolean isAudio = (mime != null && mime.startsWith("audio/"));
+                    if (!isAudio) {
+                        String lower = name.toLowerCase();
+                        for (String ext : AUDIO_EXT) {
+                            if (lower.endsWith(ext)) { isAudio = true; break; }
+                        }
+                    }
+                    if (isAudio) {
+                        Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+                        JSObject o = new JSObject();
+                        o.put("uri", docUri.toString());
+                        o.put("name", name);
+                        o.put("relativePath", childRel);
+                        o.put("size", size);
+                        o.put("mime", mime == null ? "" : mime);
+                        out.put(o);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) try { c.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    @PluginMethod
+    public void readFile(PluginCall call) {
+        String uriStr = call.getString("uri");
+        long offset = call.getLong("offset", 0L);
+        long length = call.getLong("length", -1L);
+        if (uriStr == null) { call.reject("MISSING_URI"); return; }
+        InputStream is = null;
+        try {
+            Uri uri = Uri.parse(uriStr);
+            is = getContext().getContentResolver().openInputStream(uri);
+            if (is == null) { call.reject("OPEN_FAIL"); return; }
+            long skipped = 0;
+            while (skipped < offset) {
+                long s = is.skip(offset - skipped);
+                if (s <= 0) break;
+                skipped += s;
+            }
+            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            byte[] chunk = new byte[64 * 1024];
+            long remaining = length < 0 ? Long.MAX_VALUE : length;
+            int n;
+            while (remaining > 0) {
+                int toRead = (int) Math.min((long) chunk.length, remaining);
+                n = is.read(chunk, 0, toRead);
+                if (n <= 0) break;
+                buf.write(chunk, 0, n);
+                remaining -= n;
+            }
+            byte[] data = buf.toByteArray();
+            JSObject ret = new JSObject();
+            ret.put("data", Base64.encodeToString(data, Base64.NO_WRAP));
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("READ_FAIL", e);
+        } finally {
+            if (is != null) try { is.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    @PluginMethod
+    public void hasPersistedAccess(PluginCall call) {
+        String treeUriStr = call.getString("treeUri");
+        boolean granted = false;
+        if (treeUriStr != null) {
+            Uri target = Uri.parse(treeUriStr);
+            for (UriPermission p : getContext().getContentResolver().getPersistedUriPermissions()) {
+                if (p.getUri().equals(target) && p.isReadPermission()) {
+                    granted = true;
+                    break;
+                }
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void renameDocument(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String newName = call.getString("newName");
+        if (uriStr == null || newName == null) {
+            call.reject("MISSING_ARGS");
+            return;
+        }
+        try {
+            Uri oldUri = Uri.parse(uriStr);
+            Uri newUri = DocumentsContract.renameDocument(
+                getContext().getContentResolver(), oldUri, newName
+            );
+            if (newUri == null) {
+                call.reject("RENAME_FAILED");
+                return;
+            }
+            JSObject ret = new JSObject();
+            ret.put("uri", newUri.toString());
+            ret.put("name", newName);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("RENAME_ERROR", e);
+        }
+    }
+}
+JAVA
+
+  echo "▶ Registering FolderPicker plugin in MainActivity…"
+  node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+
+function find(dir, name) {
+  if (!fs.existsSync(dir)) return null;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      const r = find(p, name);
+      if (r) return r;
+    } else if (e.name === name) return p;
+  }
+  return null;
+}
+
+const mainActivity = find("android/app/src/main/java", "MainActivity.java");
+if (!mainActivity) {
+  console.log("  ⚠ MainActivity.java not found, skipping registration");
+  process.exit(0);
+}
+let src = fs.readFileSync(mainActivity, "utf8");
+const importLine =
+  'import app.lovable.tempokey.folderpicker.FolderPickerPlugin;';
+const registerLine =
+  '    registerPlugin(FolderPickerPlugin.class);';
+
+let changed = false;
+if (!src.includes(importLine)) {
+  src = src.replace(
+    /(import com\.getcapacitor\.BridgeActivity;)/,
+    `$1\n${importLine}`,
+  );
+  changed = true;
+}
+
+if (!src.includes("registerPlugin(FolderPickerPlugin.class)")) {
+  // In Capacitor, custom plugins must be registered BEFORE super.onCreate().
+  if (/super\.onCreate\([^)]*\);/.test(src)) {
+    src = src.replace(
+      /(\n[ \t]*)(super\.onCreate\([^)]*\);)/,
+      `$1${registerLine.trim()}\n$1$2`,
+    );
+  } else {
+    // Inject a minimal onCreate override before the closing class brace.
+    src = src.replace(
+      /\}\s*$/,
+      `    @Override\n    public void onCreate(android.os.Bundle savedInstanceState) {\n${registerLine}\n        super.onCreate(savedInstanceState);\n    }\n}\n`,
+    );
+  }
+  changed = true;
+}
+
+if (changed) {
+  fs.writeFileSync(mainActivity, src);
+  console.log("  ✓ MainActivity.java updated:", mainActivity);
+} else {
+  console.log("  ✓ MainActivity.java already registers FolderPicker");
+}
+NODE
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
+# Inject TempoKey's audio-file permissions into AndroidManifest.xml.
+# Capacitor's default manifest only declares INTERNET, which makes Android
+# App Info show "No permissions requested". We add the minimal set required
+# for analysing the user's local music library:
+#   • READ_MEDIA_AUDIO       – Android 13+ (API 33+) scoped media access
+#   • READ_EXTERNAL_STORAGE  – Android 10–12 fallback (maxSdkVersion=32)
+# No camera, location, contacts or other permissions are declared.
+# ──────────────────────────────────────────────────────────────────────────
+MANIFEST="android/app/src/main/AndroidManifest.xml"
+if [ -f "$MANIFEST" ]; then
+  echo "▶ Patching AndroidManifest.xml with audio permissions and WebView input stability…"
+  node <<'NODE'
+const fs = require("fs");
+const path = "android/app/src/main/AndroidManifest.xml";
+let xml = fs.readFileSync(path, "utf8");
+
+const perms = [
+  '<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />',
+  '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
+];
+
+let changed = false;
+for (const line of perms) {
+  const attr = line.match(/android:name="([^"]+)"/)[1];
+  if (!xml.includes(`android:name="${attr}"`)) {
+    xml = xml.replace(/<\/manifest>/, `    ${line}\n</manifest>`);
+    changed = true;
+  }
+}
+
+// Keep the Capacitor WebView on the normal Android keyboard resize path.
+// Without this, fullscreen / edge-to-edge windows can relayout unpredictably
+// when an input opens the IME, which looks like a hard freeze in the APK.
+xml = xml.replace(/<activity\b([^>]*)>/, (match, attrs) => {
+  let next = attrs;
+  const ensureAttr = (name, value) => {
+    const re = new RegExp(`${name}="[^"]*"`);
+    if (re.test(next)) next = next.replace(re, `${name}="${value}"`);
+    else next += `\n            ${name}="${value}"`;
+  };
+  ensureAttr("android:windowSoftInputMode", "adjustResize");
+  ensureAttr("android:hardwareAccelerated", "true");
+  return `<activity${next}>`;
+});
+
+if (changed || xml !== fs.readFileSync(path, "utf8")) {
+  fs.writeFileSync(path, xml);
+  console.log("  ✓ AndroidManifest.xml updated");
+} else {
+  console.log("  ✓ AndroidManifest.xml already up to date");
+}
+NODE
+fi
+
+echo "✅ Android project prepared at ./android (webDir=$WEB_DIR)"
