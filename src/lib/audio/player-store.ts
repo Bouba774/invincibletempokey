@@ -1,6 +1,52 @@
 import { create } from "zustand";
 import { useLibraryStore, type Track } from "@/lib/library-store";
-import { getSafUri } from "@/lib/native/folder-picker";
+import {
+  getSafUri,
+  isCapacitorAndroid,
+  restoreFilesForLibrary,
+} from "@/lib/native/folder-picker";
+
+/**
+ * Map a file extension or arbitrary mime hint to a MIME type the Android
+ * WebView's MediaCodec can actually decode. The Blob URL path is sensitive
+ * to the declared type — feeding an .m4a/.wav/.flac stream as "audio/mpeg"
+ * makes the decoder bail out with MEDIA_ERR_SRC_NOT_SUPPORTED ("Impossible
+ * de lire ce fichier"). We normalize on extension first because SAF often
+ * returns an empty mime, and "audio/mpeg" as a default is actively harmful.
+ */
+function inferAudioMime(name: string, hinted?: string | null): string {
+  const lower = (name || "").toLowerCase();
+  const ext = lower.includes(".") ? lower.slice(lower.lastIndexOf(".") + 1) : "";
+  switch (ext) {
+    case "mp3":
+      return "audio/mpeg";
+    case "m4a":
+    case "mp4":
+    case "aac":
+      return "audio/mp4";
+    case "wav":
+      return "audio/wav";
+    case "flac":
+      return "audio/flac";
+    case "ogg":
+    case "oga":
+      return "audio/ogg";
+    case "opus":
+      return "audio/ogg; codecs=opus";
+    case "webm":
+      return "audio/webm";
+    case "aiff":
+    case "aif":
+      return "audio/aiff";
+    case "wma":
+      return "audio/x-ms-wma";
+    default:
+      // Last resort: trust the hint only if it looks like an audio mime;
+      // otherwise leave the type empty so the WebView sniffs the bytes.
+      if (hinted && /^audio\//i.test(hinted)) return hinted;
+      return "";
+  }
+}
 
 interface PlayerState {
   currentId: string | null;
