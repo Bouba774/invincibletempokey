@@ -12,10 +12,17 @@ export interface SafFileMeta {
 }
 
 export interface FolderPickerPlugin {
+  checkAudioPermission(): Promise<{ state: "granted" | "denied" | "blocked" | "unsupported" }>;
+  requestAudioPermission(): Promise<{ state: "granted" | "denied" | "blocked" | "unsupported" }>;
+  openAppSettings(): Promise<{ opened: boolean }>;
   pickFolder(): Promise<{ treeUri: string; name: string }>;
   listAudioFiles(opts: { treeUri: string }): Promise<{
     rootName: string;
     files: SafFileMeta[];
+  }>;
+  getPlayableUri(opts: { uri: string; name?: string; mime?: string; size?: number }): Promise<{
+    uri: string;
+    mime: string;
   }>;
   readFile(opts: { uri: string; offset?: number; length?: number }): Promise<{
     data: string;
@@ -46,21 +53,55 @@ interface AndroidLibraryMeta {
   treeUri: string;
   name: string;
   importedAt: number;
+  fileMetas?: Array<{ trackId: string; meta: SafFileMeta }>;
+}
+
+export function getSafMeta(file: File | undefined | null): SafFileMeta | null {
+  if (!file) return null;
+  const v = (file as unknown as { __safMeta?: unknown }).__safMeta;
+  if (v && typeof v === "object") return v as SafFileMeta;
+  return null;
 }
 
 export async function persistAndroidLibrary(
   libId: string,
   treeUri: string,
   name: string,
+  entries?: Array<{ trackId: string; file: File }>,
 ): Promise<void> {
   try {
+    const fileMetas = entries
+      ?.map(({ trackId, file }) => {
+        const meta = getSafMeta(file);
+        return meta ? { trackId, meta } : null;
+      })
+      .filter((v): v is { trackId: string; meta: SafFileMeta } => !!v);
     const rec: AndroidLibraryMeta = {
       libId,
       treeUri,
       name,
       importedAt: Date.now(),
+      fileMetas,
     };
     await idbSet(`saf:${libId}`, rec, safStore);
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function updateAndroidTrackFileMeta(
+  libId: string,
+  trackId: string,
+  meta: SafFileMeta,
+): Promise<void> {
+  try {
+    const rec = await loadAndroidLibrary(libId);
+    if (!rec) return;
+    const fileMetas = [...(rec.fileMetas ?? [])];
+    const i = fileMetas.findIndex((x) => x.trackId === trackId);
+    if (i >= 0) fileMetas[i] = { trackId, meta };
+    else fileMetas.push({ trackId, meta });
+    await idbSet(`saf:${libId}`, { ...rec, fileMetas }, safStore);
   } catch {
     /* best-effort */
   }
@@ -82,6 +123,11 @@ export async function loadAndroidLibrary(
 export function getActiveTreeUri(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(ACTIVE_TREE_KEY);
+}
+
+function getActiveTreeName(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(ACTIVE_TREE_NAME_KEY);
 }
 
 export function setActiveTreeUri(uri: string, name?: string): void {
@@ -198,6 +244,24 @@ export function getSafUri(file: File | undefined | null): string | null {
   return typeof v === "string" ? v : null;
 }
 
+export async function getSafPlayableUrl(
+  file: File,
+): Promise<{ url: string; mime: string } | null> {
+  const uri = getSafUri(file);
+  if (!uri) return null;
+  const meta = getSafMeta(file);
+  const res = await FolderPicker.getPlayableUri({
+    uri,
+    name: file.name || meta?.name,
+    mime: file.type || meta?.mime,
+    size: file.size || meta?.size,
+  });
+  return {
+    url: Capacitor.convertFileSrc?.(res.uri) ?? res.uri,
+    mime: res.mime || file.type || meta?.mime || "",
+  };
+}
+
 export async function pickAndroidFolder(): Promise<{
   rootName: string;
   treeUri: string;
@@ -236,15 +300,48 @@ export async function pickAndroidFolder(): Promise<{
  */
 export async function restoreAndroidFiles(
   libId: string,
-): Promise<{ name: string; treeUri: string; files: File[] } | null> {
+): Promise<{
+  name: string;
+  treeUri: string;
+  files: File[];
+  entries?: Array<{ trackId: string; file: File }>;
+} | null> {
   if (!isCapacitorAndroid()) return null;
-  const meta = await loadAndroidLibrary(libId);
-  if (!meta) return null;
+  let meta = await loadAndroidLibrary(libId);
+  if (!meta) {
+    const activeTreeUri = getActiveTreeUri();
+    if (!activeTreeUri) return null;
+    meta = {
+      libId,
+      treeUri: activeTreeUri,
+      name: getActiveTreeName() || "Bibliothèque",
+      importedAt: 0,
+    };
+  }
   try {
     const { granted } = await FolderPicker.hasPersistedAccess({
       treeUri: meta.treeUri,
     });
     if (!granted) return null;
+
+    // Preferred cold-start path: rebuild the exact trackId → SAF document URI
+    // mapping saved during import. This avoids fragile full-tree re-scans and
+    // path matching when the app is reopened, so playback/rename works without
+    // asking the user to re-import the library.
+    if (meta.fileMetas && meta.fileMetas.length > 0) {
+      const entries = meta.fileMetas.map(({ trackId, meta: fileMeta }) => ({
+        trackId,
+        file: safFileFromMeta(fileMeta),
+      }));
+      setActiveTreeUri(meta.treeUri, meta.name);
+      return {
+        name: meta.name,
+        treeUri: meta.treeUri,
+        files: entries.map((e) => e.file),
+        entries,
+      };
+    }
+
     const { rootName, files: metas } = await FolderPicker.listAudioFiles({
       treeUri: meta.treeUri,
     });
@@ -269,19 +366,36 @@ export async function restoreAndroidFiles(
 export async function restoreFilesForLibrary(lib: Library): Promise<boolean> {
   const restored = await restoreAndroidFiles(lib.id);
   if (!restored) return false;
+  if (restored.entries && restored.entries.length > 0) {
+    useLibraryStore.getState().setFiles(restored.entries);
+    return true;
+  }
   const byPath = new Map<string, File>();
+  const byPathNoRoot = new Map<string, File>();
+  const byName = new Map<string, File>();
   for (const f of restored.files) {
     const p =
       (f as unknown as { webkitRelativePath?: string }).webkitRelativePath ||
       f.name;
     byPath.set(p, f);
+    const noRoot = p.includes("/") ? p.slice(p.indexOf("/") + 1) : p;
+    byPathNoRoot.set(noRoot, f);
+    byName.set(f.name, f);
   }
   const entries: Array<{ trackId: string; file: File }> = [];
   for (const t of lib.tracks) {
-    const f = byPath.get(t.filePath) ?? byPath.get(t.fileName);
+    const noRoot = t.filePath.includes("/")
+      ? t.filePath.slice(t.filePath.indexOf("/") + 1)
+      : t.filePath;
+    const f =
+      byPath.get(t.filePath) ??
+      byPathNoRoot.get(noRoot) ??
+      byPath.get(t.fileName) ??
+      byName.get(t.fileName);
     if (f) entries.push({ trackId: t.id, file: f });
   }
   if (entries.length === 0) return false;
   useLibraryStore.getState().setFiles(entries);
+  await persistAndroidLibrary(lib.id, restored.treeUri, restored.name, entries);
   return true;
 }

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useLibraryStore, type Track } from "@/lib/library-store";
 import {
+  getSafPlayableUrl,
   getSafUri,
   isCapacitorAndroid,
   restoreFilesForLibrary,
@@ -201,11 +202,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         error: null,
       });
       try {
-        const buf = await file.arrayBuffer();
-        const blob = mime ? new Blob([buf], { type: mime }) : new Blob([buf]);
-        currentUrl = URL.createObjectURL(blob);
+        const nativePlayable = await getSafPlayableUrl(file).catch(() => null);
+        if (nativePlayable?.url) {
+          currentUrl = nativePlayable.url;
+        } else {
+          const buf = await file.arrayBuffer();
+          const blob = mime ? new Blob([buf], { type: mime }) : new Blob([buf]);
+          currentUrl = URL.createObjectURL(blob);
+        }
         a.src = currentUrl;
         a.volume = get().volume;
+        a.load();
         await a.play();
       } catch (e) {
         console.warn("[tempokey] saf play failed", e);
