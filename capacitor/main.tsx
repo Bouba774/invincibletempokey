@@ -70,11 +70,8 @@ void initAndroidBack();
       const apply = () => {
         const isDark = document.documentElement.classList.contains("dark");
 
-        // IMPORTANT: la WebView NE recouvre PAS les barres système
-        // (cf. capacitor.config.ts). Si on la remettait en overlay ici,
-        // les overlays plein écran (sheet "Détails", FilterSheet) et les
-        // champs de saisie devenaient insensibles au tap sur Android.
-        sb.StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+        // Keep WebView overlaying system bars (true edge-to-edge fullscreen).
+        sb.StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
 
         // Push the correct icon contrast for the active theme.
         // Dark theme → Style.Dark (white icons on our dark bg)

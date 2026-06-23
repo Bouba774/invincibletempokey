@@ -24,13 +24,10 @@ const config: CapacitorConfig = {
     // user action, which avoids Android focus/keyboard deadlocks around panels.
     initialFocus: false,
     webContentsDebuggingEnabled: false,
-    // IMPORTANT: ne pas FORCER l'edge-to-edge. Sur Android 15+ il est déjà
-    // imposé par le système (et Capacitor injecte automatiquement les safe
-    // areas) ; sur Android < 15 le `force` combiné à `overlaysWebView`
-    // décale le hit-testing tactile, ce qui rendait inutilisables les
-    // overlays (sheet "Détails", champ de template, champ de recherche)
-    // tant que l'utilisateur n'avait pas relancé l'app.
-    adjustMarginsForEdgeToEdge: "auto",
+    // Edge-to-edge moderne (Android 15+ obligatoire) : la WebView s'étend
+    // sous les barres système ; nous gérons les safe areas en CSS via
+    // env(safe-area-inset-*).
+    adjustMarginsForEdgeToEdge: "force",
   },
   plugins: {
     SplashScreen: {
@@ -44,13 +41,10 @@ const config: CapacitorConfig = {
       splashImmersive: true,
     },
     StatusBar: {
-      // La WebView NE recouvre PAS la status bar : l'activité native gère
-      // l'inset top, donc les coordonnées tactiles dans la WebView restent
-      // alignées avec ce qui est dessiné. Combiné à `overlaysWebView:true`,
-      // le WebView Android freeze le tap sur les overlays plein écran
-      // (sheet "Détails", champs de saisie) — bug reproductible sur de
-      // nombreuses versions de System WebView.
-      overlaysWebView: false,
+      // Couche transparente — la WebView dessine derrière la status bar.
+      // Le style (icônes claires/sombres) est piloté depuis main.tsx
+      // en suivant le thème TempoKey (clair/sombre).
+      overlaysWebView: true,
       style: "DEFAULT",
       backgroundColor: "#00000000",
     },

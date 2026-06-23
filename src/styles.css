@@ -410,11 +410,8 @@ html.native-android #app {
 
 html.native-android body {
   background-attachment: scroll;
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  /* NOTE: PAS de `touch-action: manipulation` global ici. Sur Android
-     System WebView, l'appliquer au <body> peut figer les taps sur les
-     overlays plein écran (sheet "Détails", FilterSheet) et sur les
-     champs de saisie lorsque le clavier apparaît. Voir #stability. */
 }
 
 html.native-android *,
@@ -461,13 +458,8 @@ html.native-android [class*="zoom-out-"] {
   transition-duration: 1ms !important;
 }
 
-/* IMPORTANT: ne PAS utiliser `contain: layout` ici. `contain: layout` crée
-   un nouveau "containing block" pour les enfants en `position: fixed`,
-   ce qui sur Android System WebView décale leur hit-testing tactile :
-   le sheet "Détails" et le RenamePanel s'affichaient mais la croix de
-   fermeture et les boutons ne recevaient plus le tap, obligeant à tuer
-   l'app. On garde seulement `isolation` pour empiler proprement. */
 html.native-android .android-fixed-layer {
+  contain: layout paint;
   isolation: isolate;
 }
 
