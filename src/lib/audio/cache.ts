@@ -14,7 +14,9 @@ export interface TrackAnalysis {
   analyzedAt: number;
 }
 
-const store = createStore("tempokey-analysis", "cache");
+// Bump the store name whenever the analysis algorithm changes so that
+// existing libraries are transparently re-analysed with the new engine.
+const store = createStore("tempokey-analysis-v2", "cache");
 
 export async function getCachedAnalysis(fileHash: string): Promise<TrackAnalysis | null> {
   try {

@@ -74,7 +74,7 @@ export async function analyzeFile(
   const keyRes = estimateKey(mono, audio.sampleRate);
   const camelot = keyRes ? toCamelot(keyRes) : null;
 
-  const suspect = bpmRes.suspect || (keyRes ? keyRes.confidence < 0.45 : true);
+  const suspect = bpmRes.suspect || (keyRes ? keyRes.confidence < 0.35 : true);
 
   const result: TrackAnalysis = {
     fileHash,
