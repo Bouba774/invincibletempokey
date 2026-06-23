@@ -20,7 +20,7 @@ export interface FolderPickerPlugin {
     rootName: string;
     files: SafFileMeta[];
   }>;
-  getPlayableUri(opts: { uri: string; name?: string; mime?: string }): Promise<{
+  getPlayableUri(opts: { uri: string; name?: string; mime?: string; size?: number }): Promise<{
     uri: string;
     mime: string;
   }>;
@@ -249,6 +249,7 @@ export async function getSafPlayableUrl(
     uri,
     name: file.name || meta?.name,
     mime: file.type || meta?.mime,
+    size: file.size || meta?.size,
   });
   return {
     url: Capacitor.convertFileSrc?.(res.uri) ?? res.uri,
