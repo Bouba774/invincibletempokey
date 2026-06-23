@@ -132,11 +132,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   error: null,
 
   play: async (track) => {
-    const file = useLibraryStore.getState().getFile(track.id);
+    let file = useLibraryStore.getState().getFile(track.id);
+
+    // Cold-start / SAF tree not yet hydrated: rebuild the in-memory file
+    // map from the persisted Android tree URI on demand, so the user
+    // doesn't have to re-import anything after closing the app.
+    if (!file && isCapacitorAndroid()) {
+      const lib = useLibraryStore.getState().library;
+      if (lib) {
+        set({
+          currentId: track.id,
+          currentTitle: track.title,
+          isLoading: true,
+          error: null,
+          positionSec: 0,
+          durationSec: track.durationSec ?? 0,
+        });
+        try {
+          await restoreFilesForLibrary(lib);
+        } catch (e) {
+          console.warn("[tempokey] saf restore failed", e);
+        }
+        file = useLibraryStore.getState().getFile(track.id);
+      }
+    }
+
     if (!file) {
       set({
-        error:
-          "Fichier audio indisponible — réimporte le dossier pour activer la pré-écoute.",
+        error: isCapacitorAndroid()
+          ? "Fichier audio introuvable — l'accès au dossier a peut-être été révoqué. Réimporte le dossier."
+          : "Fichier audio indisponible — réimporte le dossier pour activer la pré-écoute.",
         currentId: track.id,
         currentTitle: track.title,
         isPlaying: false,
@@ -161,8 +186,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // On Android SAF-backed files, the underlying Blob bytes are empty —
     // the bytes live behind `content://` and are streamed via the native
     // plugin. Fetch the full buffer once and wrap it in a real Blob so the
-    // <audio> element can play it.
+    // <audio> element can play it. The MIME MUST match the codec or the
+    // WebView decoder rejects with MEDIA_ERR_SRC_NOT_SUPPORTED.
     const safUri = getSafUri(file);
+    const mime = inferAudioMime(file.name, file.type);
     if (safUri) {
       set({
         currentId: track.id,
@@ -175,7 +202,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       });
       try {
         const buf = await file.arrayBuffer();
-        const blob = new Blob([buf], { type: file.type || "audio/mpeg" });
+        const blob = mime ? new Blob([buf], { type: mime }) : new Blob([buf]);
         currentUrl = URL.createObjectURL(blob);
         a.src = currentUrl;
         a.volume = get().volume;
@@ -190,7 +217,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
       return;
     }
-    currentUrl = URL.createObjectURL(file);
+    // Web / non-SAF path: if the File has a sane MIME, use it; otherwise
+    // re-wrap with an extension-derived MIME so .m4a/.wav/.flac play too.
+    if (mime && file.type !== mime) {
+      try {
+        const buf = await file.arrayBuffer();
+        const blob = new Blob([buf], { type: mime });
+        currentUrl = URL.createObjectURL(blob);
+      } catch {
+        currentUrl = URL.createObjectURL(file);
+      }
+    } else {
+      currentUrl = URL.createObjectURL(file);
+    }
     a.src = currentUrl;
     a.volume = get().volume;
     set({
@@ -206,7 +245,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       await a.play();
     } catch (e) {
       console.warn("[tempokey] audio play failed", e);
-      set({ isPlaying: false, isLoading: false });
+      set({ isPlaying: false, isLoading: false, error: "Impossible de lire ce fichier." });
     }
   },
 
