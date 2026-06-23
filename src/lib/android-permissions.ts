@@ -12,6 +12,8 @@
  * No business logic is touched — this only mediates the consent UX.
  */
 
+import { FolderPicker } from "@/lib/native/folder-picker";
+
 export type AudioPermissionStatus = "granted" | "denied" | "blocked" | "unsupported";
 
 const PERSIST_KEY = "tempokey.audio-permission.granted";
@@ -58,8 +60,6 @@ function persistGrant() {
 export async function requestAudioPermission(): Promise<AudioPermissionStatus> {
   if (!(await isNativeAndroid())) return "granted";
 
-  const native = await safeImport("@/lib/native/folder-picker");
-  const FolderPicker = native?.FolderPicker;
   if (!FolderPicker?.requestAudioPermission) {
     // Plugin missing in web/dev; the SAF picker still provides access to the
     // selected folder, so do not block the import flow.
