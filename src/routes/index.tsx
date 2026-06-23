@@ -41,7 +41,10 @@ import {
   persistAndroidLibrary,
   restoreFilesForLibrary,
 } from "@/lib/native/folder-picker";
-import { AudioPermissionDialog, type AudioPermissionDialogVariant } from "@/components/AudioPermissionDialog";
+import {
+  AudioPermissionDialog,
+  type AudioPermissionDialogVariant,
+} from "@/components/AudioPermissionDialog";
 import {
   openAndroidAppSettings,
   requestAudioPermission,
