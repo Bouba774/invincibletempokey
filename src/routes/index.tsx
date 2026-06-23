@@ -41,6 +41,12 @@ import {
   persistAndroidLibrary,
   restoreFilesForLibrary,
 } from "@/lib/native/folder-picker";
+import { AudioPermissionDialog, type AudioPermissionDialogVariant } from "@/components/AudioPermissionDialog";
+import {
+  hasPersistedGrant,
+  openAndroidAppSettings,
+  requestAudioPermission,
+} from "@/lib/android-permissions";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -94,6 +100,8 @@ function Home() {
   const startAnalysis = useAnalysisStore((s) => s.start);
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<ImportProgress | null>(null);
+  const [permissionDialog, setPermissionDialog] =
+    useState<AudioPermissionDialogVariant | null>(null);
 
   useEffect(() => {
     void hydrate();
@@ -109,13 +117,11 @@ function Home() {
   //  - Older browsers              → legacy <input webkitdirectory> fallback
   async function openFolderPicker() {
     if (isCapacitorAndroid()) {
-      setProgress({ phase: "scan", scanned: 0, total: 0 });
-      const result = await pickAndroidFolder();
-      if (!result) {
-        setProgress(null);
+      if (!hasPersistedGrant()) {
+        setPermissionDialog("request");
         return;
       }
-      await importFiles(result.files, result.treeUri);
+      await openAndroidFolderAfterPermission();
       return;
     }
     if (isFsAccessSupported()) {
@@ -162,6 +168,26 @@ function Home() {
     inputRef.current?.click();
   }
 
+  async function openAndroidFolderAfterPermission() {
+    setProgress({ phase: "scan", scanned: 0, total: 0 });
+    const result = await pickAndroidFolder();
+    if (!result) {
+      setProgress(null);
+      return;
+    }
+    await importFiles(result.files, result.treeUri);
+  }
+
+  async function confirmAndroidPermission() {
+    const state = await requestAudioPermission();
+    if (state === "granted") {
+      setPermissionDialog(null);
+      await openAndroidFolderAfterPermission();
+      return;
+    }
+    setPermissionDialog(state === "blocked" ? "blocked" : "denied");
+  }
+
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
@@ -186,7 +212,7 @@ function Home() {
       resetAnalysis();
       await setLibrary(lib);
       if (androidTreeUri) {
-        await persistAndroidLibrary(lib.id, androidTreeUri, lib.name);
+        await persistAndroidLibrary(lib.id, androidTreeUri, lib.name, fileEntries);
       }
       setFiles(fileEntries);
       setProgress({ phase: "done", scanned: lib.tracks.length, total: lib.tracks.length });
@@ -231,6 +257,16 @@ function Home() {
         directory=""
         onChange={handleFiles}
         className="hidden"
+      />
+      <AudioPermissionDialog
+        open={permissionDialog !== null}
+        variant={permissionDialog ?? "request"}
+        onCancel={() => setPermissionDialog(null)}
+        onConfirm={() => void confirmAndroidPermission()}
+        onOpenSettings={() => {
+          setPermissionDialog(null);
+          void openAndroidAppSettings();
+        }}
       />
 
       {/* HERO */}
