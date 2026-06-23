@@ -159,15 +159,31 @@ export function estimateBPM(samples: Float32Array, sampleRate: number): BpmEstim
   const minLag = Math.max(2, Math.floor((60 * rate) / MAX_BPM));
   const maxLag = Math.min(odf.length - 1, Math.floor((60 * rate) / MIN_BPM));
 
-  // Plain autocorrelation. The signal is short (~5k samples) so O(N²) is fine.
+  // FFT-based autocorrelation (Wiener-Khinchin theorem). This is exactly
+  // the path taken by the Vamp FixedTempoEstimator plugin used by DiscDJ
+  // and lets us analyse a longer window without slowing the import down.
+  let nfft = 1;
+  while (nfft < odf.length * 2) nfft <<= 1;
+  const re = new Float32Array(nfft);
+  const im = new Float32Array(nfft);
+  for (let i = 0; i < odf.length; i++) re[i] = odf[i];
+  fftInPlace(re, im);
+  for (let i = 0; i < nfft; i++) {
+    re[i] = re[i] * re[i] + im[i] * im[i];
+    im[i] = 0;
+  }
+  // Inverse FFT via conjugation trick.
+  for (let i = 0; i < nfft; i++) im[i] = -im[i];
+  fftInPlace(re, im);
+  const invN = 1 / nfft;
   const acf = new Float32Array(maxLag + 1);
   let acfMax = 0;
   for (let lag = minLag; lag <= maxLag; lag++) {
-    let acc = 0;
-    const end = odf.length - lag;
-    for (let i = 0; i < end; i++) acc += odf[i] * odf[i + lag];
-    acf[lag] = acc;
-    if (acc > acfMax) acfMax = acc;
+    // Unbiased estimate: normalize by the number of overlapping samples.
+    const overlap = odf.length - lag;
+    const v = overlap > 0 ? (re[lag] * invN) / overlap : 0;
+    acf[lag] = v;
+    if (v > acfMax) acfMax = v;
   }
   if (acfMax <= 0) return empty;
 
