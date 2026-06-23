@@ -117,7 +117,6 @@ import android.Manifest;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.UriPermission;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -126,7 +125,6 @@ import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.MimeTypeMap;
 import androidx.activity.result.ActivityResult;
-import androidx.core.app.ActivityCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -177,10 +175,7 @@ public class FolderPickerPlugin extends Plugin {
         boolean requested = getContext()
             .getSharedPreferences(PREFS, 0)
             .getBoolean(REQUESTED, false);
-        boolean rationale = ActivityCompat.shouldShowRequestPermissionRationale(
-            getActivity(),
-            androidPermission()
-        );
+        boolean rationale = getActivity().shouldShowRequestPermissionRationale(androidPermission());
         return requested && !rationale ? "blocked" : "denied";
     }
 
