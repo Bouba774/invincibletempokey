@@ -206,10 +206,13 @@ export function estimateBPM(samples: Float32Array, sampleRate: number): BpmEstim
     }
     const bpm = bpmFromLag(lag);
     if (bpm < MIN_BPM || bpm > MAX_BPM) continue;
-    // Prefer DJ window: gentle gaussian centred at 125 BPM.
-    const dist = (bpm - 125) / 60;
-    const prior = Math.exp(-0.5 * dist * dist);
-    const inside = bpm >= DJ_PREF_MIN && bpm <= DJ_PREF_MAX ? 1.0 : 0.7;
+    // Log-Gaussian tempo prior centred at 120 BPM — the exact bias used
+    // by the Vamp FixedTempoEstimator plugin shipped with DiscDJ. It is
+    // symmetric in the half/double-tempo sense (a track at 60 and one at
+    // 240 BPM are pulled toward 120 with the same strength).
+    const logDist = Math.log(bpm / 120);
+    const prior = Math.exp(-0.5 * (logDist / 0.55) * (logDist / 0.55));
+    const inside = bpm >= DJ_PREF_MIN && bpm <= DJ_PREF_MAX ? 1.0 : 0.75;
     candidates.push({ bpm, lag, score: s * prior * inside });
   }
   if (candidates.length === 0) return empty;
