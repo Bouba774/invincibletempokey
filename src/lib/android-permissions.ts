@@ -100,16 +100,9 @@ export async function requestAudioPermission(): Promise<AudioPermissionStatus> {
  */
 export async function openAndroidAppSettings(): Promise<boolean> {
   if (!(await isNativeAndroid())) return false;
-  const mod = await safeImport("@capacitor/app");
-  const App = mod?.App;
-  // @capacitor/app exposes openUrl which accepts intent:// URIs on Android.
-  if (!App?.openUrl) return false;
   try {
-    // Settings.ACTION_APPLICATION_DETAILS_SETTINGS for our package.
-    await App.openUrl({
-      url: "package:app.lovable.tempokey",
-    });
-    return true;
+    const res = await FolderPicker.openAppSettings();
+    return res?.opened === true;
   } catch {
     return false;
   }
