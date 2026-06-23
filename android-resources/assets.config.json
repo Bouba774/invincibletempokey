@@ -1,0 +1,13 @@
+{
+  "$schema": "https://capacitorjs.com/schema/assets.json",
+  "android": {
+    "icon": {
+      "background": "#FFFFFF",
+      "foreground": "icon.png"
+    },
+    "splash": {
+      "background": "#FFFFFF",
+      "image": "splash.png"
+    }
+  }
+}

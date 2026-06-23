@@ -5,17 +5,16 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system definition.
+ * TempoKey — Premium DJ / music analysis identity.
  *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
+ * Palette inspirée des suites audio pro (Rekordbox, Mixed In Key, Ableton).
+ * - Violet  = intelligence, analyse, technologie musicale (primary)
+ * - Menthe  = audio, harmonie, compatibilité (accent)
+ * - Surfaces sombres stratifiées (jamais de noir pur, pas d'aplats agressifs).
  *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ * Tous les composants consomment les tokens sémantiques (--primary,
+ * --surface, --surface-elevated, --gradient-primary, --accent, …) — modifier
+ * cette feuille suffit à faire vivre l'identité dans toute l'app.
  */
 
 @theme inline {
@@ -26,6 +25,10 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -62,74 +65,174 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --radius: 0.875rem;
+
+  /* Surfaces stratifiées — jamais de noir pur, dégradé subtil de profondeur */
+  --background: oklch(0.16 0.018 265);        /* #0A0D14 */
+  --surface: oklch(0.21 0.022 263);           /* #121826 */
+  --surface-elevated: oklch(0.26 0.025 263);  /* #1A2235 */
+  --card: oklch(0.21 0.022 263);
+  --card-foreground: oklch(0.96 0.004 250);
+  --popover: oklch(0.23 0.024 263);
+  --popover-foreground: oklch(0.96 0.004 250);
+
+  /* Texte */
+  --foreground: oklch(0.96 0.004 250);        /* #F3F5F7 */
+  --muted: oklch(0.26 0.022 263);
+  --muted-foreground: oklch(0.7 0.018 258);   /* #97A0B3 */
+
+  /* Violet — intelligence, analyse */
+  --primary: oklch(0.63 0.22 295);            /* #8B5CF6 */
+  --primary-foreground: oklch(0.99 0.003 250);
+  --primary-glow: oklch(0.74 0.19 293);
+
+  /* Menthe — audio, harmonie, compatibilité */
+  --accent: oklch(0.82 0.18 168);             /* #00E5A8 */
+  --accent-foreground: oklch(0.16 0.018 265);
+  --accent-soft: oklch(0.82 0.18 168 / 0.16);
+
+  --secondary: oklch(0.28 0.026 263);
+  --secondary-foreground: oklch(0.96 0.004 250);
+
+  /* États */
+  --success: oklch(0.82 0.18 168);
+  --warning: oklch(0.82 0.15 75);             /* #FFB84D */
+  --destructive: oklch(0.7 0.18 22);          /* #FF6B6B */
+  --destructive-foreground: oklch(0.99 0.003 250);
+
+  /* Lignes & inputs */
+  --border: oklch(0.32 0.022 263 / 0.7);
+  --input: oklch(0.28 0.022 263);
+  --ring: oklch(0.63 0.22 295);
+
+  /* Dégradés signature */
+  --gradient-primary: linear-gradient(135deg, oklch(0.55 0.22 292), oklch(0.7 0.21 295));
+  --gradient-accent: linear-gradient(135deg, oklch(0.7 0.19 175), oklch(0.85 0.18 165));
+  --gradient-surface: linear-gradient(180deg, oklch(0.24 0.025 263), oklch(0.18 0.022 263));
+  --gradient-hero: radial-gradient(120% 90% at 0% 0%, oklch(0.55 0.22 292 / 0.35), transparent 55%),
+                   radial-gradient(110% 80% at 100% 100%, oklch(0.82 0.18 168 / 0.18), transparent 60%),
+                   linear-gradient(180deg, oklch(0.2 0.022 263), oklch(0.16 0.018 265));
+
+  /* Ombres premium — pas d'ombre noire brute, teintée violet/profondeur */
+  --shadow-elegant: 0 16px 40px -20px oklch(0.08 0.04 265 / 0.7),
+                    0 2px 6px -2px oklch(0.08 0.04 265 / 0.5);
+  --shadow-glow: 0 0 0 1px oklch(0.63 0.22 295 / 0.35),
+                 0 16px 40px -12px oklch(0.55 0.22 292 / 0.45);
+  --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.04) inset,
+                 0 12px 32px -16px oklch(0.06 0.04 265 / 0.6);
+
+  --chart-1: oklch(0.63 0.22 295);
+  --chart-2: oklch(0.82 0.18 168);
+  --chart-3: oklch(0.74 0.19 293);
+  --chart-4: oklch(0.82 0.15 75);
+  --chart-5: oklch(0.7 0.18 22);
+
+  --sidebar: oklch(0.21 0.022 263);
+  --sidebar-foreground: oklch(0.96 0.004 250);
+  --sidebar-primary: oklch(0.63 0.22 295);
+  --sidebar-primary-foreground: oklch(0.99 0.003 250);
+  --sidebar-accent: oklch(0.28 0.026 263);
+  --sidebar-accent-foreground: oklch(0.96 0.004 250);
+  --sidebar-border: oklch(0.32 0.022 263 / 0.7);
+  --sidebar-ring: oklch(0.63 0.22 295);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --background: oklch(0.16 0.018 265);
+  --foreground: oklch(0.96 0.004 250);
+  --card: oklch(0.21 0.022 263);
+  --card-foreground: oklch(0.96 0.004 250);
+  --popover: oklch(0.23 0.024 263);
+  --popover-foreground: oklch(0.96 0.004 250);
+  --primary: oklch(0.63 0.22 295);
+  --primary-foreground: oklch(0.99 0.003 250);
+  --secondary: oklch(0.28 0.026 263);
+  --secondary-foreground: oklch(0.96 0.004 250);
+  --muted: oklch(0.26 0.022 263);
+  --muted-foreground: oklch(0.7 0.018 258);
+  --accent: oklch(0.82 0.18 168);
+  --accent-foreground: oklch(0.16 0.018 265);
+  --destructive: oklch(0.7 0.18 22);
+  --destructive-foreground: oklch(0.99 0.003 250);
+  --border: oklch(0.32 0.022 263 / 0.7);
+  --input: oklch(0.28 0.022 263);
+  --ring: oklch(0.63 0.22 295);
+}
+
+/* Light theme — palette miroir, identité violet/menthe conservée.
+   Cibles WCAG AA :
+   - foreground / background        ≥ 12:1 (texte principal)
+   - muted-foreground / background  ≥ 4.8:1 (texte secondaire)
+   - border / background            visible sans dominer
+*/
+.light {
+  --background: oklch(0.985 0.004 250);          /* #FAFBFC */
+  --surface: oklch(0.965 0.006 250);             /* #F1F3F7 — distinct du bg */
+  --surface-elevated: oklch(1 0 0);              /* #FFFFFF — cartes */
+  --foreground: oklch(0.18 0.022 265);           /* #15192A — quasi noir */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.022 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.022 265);
+
+  --muted: oklch(0.94 0.008 250);
+  --muted-foreground: oklch(0.40 0.022 263);     /* #525A6E — AA sur blanc */
+
+  --primary: oklch(0.50 0.22 295);               /* violet plus profond pour AA */
+  --primary-foreground: oklch(0.99 0.003 250);
+  --primary-glow: oklch(0.48 0.22 295);          /* assez sombre pour AA texte sur surface claire */
+
+  --accent: oklch(0.62 0.16 172);                /* menthe plus saturée/foncée */
+  --accent-foreground: oklch(0.99 0.003 250);    /* texte clair sur menthe */
+  --accent-soft: oklch(0.62 0.16 172 / 0.14);
+
+  --secondary: oklch(0.92 0.012 250);
+  --secondary-foreground: oklch(0.18 0.022 265);
+
+  --destructive: oklch(0.55 0.22 22);
+  --destructive-foreground: oklch(0.99 0.003 250);
+
+  --success: oklch(0.55 0.16 168);
+  --warning: oklch(0.62 0.16 65);
+
+  --border: oklch(0.82 0.014 263);               /* opaque, +visible */
+  --input: oklch(0.82 0.014 263);
+  --ring: oklch(0.50 0.22 295);
+
+  --gradient-primary: linear-gradient(135deg, oklch(0.48 0.22 292), oklch(0.62 0.21 295));
+  --gradient-accent: linear-gradient(135deg, oklch(0.62 0.16 172), oklch(0.76 0.16 165));
+  --gradient-surface: linear-gradient(180deg, oklch(1 0 0), oklch(0.965 0.006 250));
+  --gradient-hero: radial-gradient(120% 90% at 0% 0%, oklch(0.55 0.22 292 / 0.16), transparent 55%),
+                   radial-gradient(110% 80% at 100% 100%, oklch(0.62 0.16 172 / 0.12), transparent 60%),
+                   linear-gradient(180deg, oklch(0.99 0.004 250), oklch(0.96 0.006 250));
+
+  --shadow-elegant: 0 16px 40px -22px oklch(0.30 0.06 265 / 0.22),
+                    0 2px 6px -2px oklch(0.30 0.06 265 / 0.14);
+  --shadow-glow: 0 0 0 1px oklch(0.50 0.22 295 / 0.30),
+                 0 14px 36px -14px oklch(0.50 0.22 292 / 0.32);
+  --shadow-card: 0 1px 0 0 oklch(1 0 0 / 0.6) inset,
+                 0 10px 28px -16px oklch(0.30 0.06 265 / 0.22);
+
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.18 0.022 265);
+  --sidebar-primary: oklch(0.50 0.22 295);
+  --sidebar-primary-foreground: oklch(0.99 0.003 250);
+  --sidebar-accent: oklch(0.94 0.008 250);
+  --sidebar-accent-foreground: oklch(0.18 0.022 265);
+  --sidebar-border: oklch(0.82 0.014 263);
+  --sidebar-ring: oklch(0.50 0.22 295);
+}
+
+
+.light body {
+  background-image:
+    radial-gradient(60% 50% at 50% 0%, oklch(0.55 0.22 292 / 0.05), transparent 70%),
+    radial-gradient(40% 30% at 100% 100%, oklch(0.7 0.17 170 / 0.04), transparent 70%);
+}
+
+html.dark, html.light {
+  transition: background-color 220ms ease, color 220ms ease;
 }
 
 @layer base {
@@ -137,8 +240,253 @@
     border-color: var(--color-border);
   }
 
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    /* Halo très subtil pour donner de la profondeur aux écrans sombres */
+    background-image:
+      radial-gradient(60% 50% at 50% 0%, oklch(0.55 0.22 292 / 0.08), transparent 70%),
+      radial-gradient(40% 30% at 100% 100%, oklch(0.82 0.18 168 / 0.05), transparent 70%);
+    background-attachment: fixed;
+    /* Edge-to-edge Android : empêche l'overscroll de révéler du blanc/noir
+       et garantit que le bg s'étend sous les barres système. */
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
   }
 }
+
+/* ── Edge-to-edge Android : safe-area helpers ─────────────────────────────
+   Activés dès que <meta viewport-fit=cover> + StatusBar.overlay=true.
+   Inoffensifs sur le web (env() vaut 0). */
+@utility safe-pt {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility safe-pl {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+@utility safe-pr {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+@utility safe-px {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+@layer base {
+
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+
+  /* Police monospace harmonisée pour BPM / Camelot / valeurs numériques */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "ss01";
+  }
+
+  /* Scrollbars « Android premium » :
+   * - barre verticale très fine (4px), thumb translucide qui apparaît au
+   *   survol / scroll, jamais agressif ;
+   * - barre horizontale globale supprimée (les rares zones à scroll
+   *   horizontal — onglets, badges — déclarent .scrollbar-none). */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.55 0.04 280 / 0.35) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.55 0.04 280 / 0.35);
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.6 0.06 290 / 0.55);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Sélection texte aux couleurs de la marque */
+  ::selection {
+    background: oklch(0.63 0.22 295 / 0.4);
+    color: oklch(0.99 0.003 250);
+  }
+}
+
+/* Masque totalement la scrollbar tout en gardant le scroll tactile fluide.
+ * Utilisé pour les rails horizontaux (onglets workspace, chips de filtres). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+/* Animations & micro-interactions — rapides, jamais excessives */
+@utility press {
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1);
+  &:active { transform: scale(0.97); }
+}
+
+@utility surface-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+/* Élévation Material-like sur hover (desktop) — sans effet sur tactile */
+@utility hover-lift {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 180ms cubic-bezier(0.2, 0, 0, 1),
+              border-color 180ms cubic-bezier(0.2, 0, 0, 1);
+  @media (hover: hover) {
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-elegant);
+    }
+  }
+}
+
+/* Skeleton shimmer — léger, basé sur tokens (compatible thème clair/sombre) */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--foreground) 10%, transparent),
+    transparent
+  );
+  animation: shimmer-sweep 1.4s ease-in-out infinite;
+}
+@keyframes shimmer-sweep {
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after { animation: none; }
+}
+
+/* ── Android APK WebView stability layer ───────────────────────────────────
+   Android System WebView is more fragile than desktop Chrome with the combo
+   `position: fixed` + `backdrop-filter` + animated transforms + keyboard
+   resize. In the APK only, we keep the same layout but remove the GPU-heavy
+   effects that were freezing taps on detail sheets, search and template inputs. */
+html.native-android,
+html.native-android body,
+html.native-android #app {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+html.native-android body {
+  background-attachment: scroll;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.native-android *,
+html.native-android *::before,
+html.native-android *::after {
+  scroll-behavior: auto !important;
+}
+
+html.native-android input,
+html.native-android textarea,
+html.native-android select,
+html.native-android button {
+  touch-action: manipulation;
+}
+
+html.native-android input,
+html.native-android textarea,
+html.native-android select {
+  font-size: 16px;
+}
+
+html.native-android .backdrop-blur,
+html.native-android .backdrop-blur-sm,
+html.native-android .backdrop-blur-md,
+html.native-android .backdrop-blur-lg,
+html.native-android .backdrop-blur-xl,
+html.native-android .backdrop-blur-2xl,
+html.native-android .backdrop-blur-3xl {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html.native-android .animate-in,
+html.native-android .animate-out,
+html.native-android .animate-fade-in,
+html.native-android .animate-scale-in,
+html.native-android [class*="fade-in-"],
+html.native-android [class*="fade-out-"],
+html.native-android [class*="slide-in-"],
+html.native-android [class*="slide-out-"],
+html.native-android [class*="zoom-in-"],
+html.native-android [class*="zoom-out-"] {
+  animation: none !important;
+  transition-duration: 1ms !important;
+}
+
+html.native-android .android-fixed-layer {
+  contain: layout paint;
+  isolation: isolate;
+}
+
+/* Équaliseur "now-playing" — barres animées discrètes */
+@keyframes eq-bar {
+  0%, 100% { height: 30%; }
+  50%      { height: 100%; }
+}
+
+/* Ripple Material-3 léger (overlay sur boutons opt-in) */
+@utility ripple {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      circle at var(--rx, 50%) var(--ry, 50%),
+      color-mix(in oklab, currentColor 22%, transparent) 0%,
+      transparent 60%
+    );
+    opacity: 0;
+    transition: opacity 320ms ease;
+    pointer-events: none;
+  }
+  &:active::after { opacity: 1; transition-duration: 60ms; }
+}
+
