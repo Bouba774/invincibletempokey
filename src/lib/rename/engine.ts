@@ -18,6 +18,7 @@ import {
   getSafUri,
   isCapacitorAndroid,
   safFileFromMeta,
+  updateAndroidTrackFileMeta,
   type SafFileMeta,
 } from "@/lib/native/folder-picker";
 
@@ -82,6 +83,7 @@ async function applyRenameAndroid(
         store.setFiles([
           { trackId: item.trackId, file: safFileFromMeta(updated) },
         ]);
+        await updateAndroidTrackFileMeta(lib.id, item.trackId, updated);
       }
       store.updateTrack(item.trackId, {
         fileName: item.newName,
