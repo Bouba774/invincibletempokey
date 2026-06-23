@@ -113,30 +113,108 @@ if [ -d "android/app" ]; then
 package app.lovable.tempokey.folderpicker;
 
 import android.app.Activity;
+import android.Manifest;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.UriPermission;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.DocumentsContract;
 import android.util.Base64;
+import android.webkit.MimeTypeMap;
 import androidx.activity.result.ActivityResult;
+import androidx.core.app.ActivityCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.security.MessageDigest;
 
-@CapacitorPlugin(name = "FolderPicker")
+@CapacitorPlugin(
+    name = "FolderPicker",
+    permissions = {
+        @Permission(alias = "audio33", strings = { Manifest.permission.READ_MEDIA_AUDIO }),
+        @Permission(alias = "storage32", strings = { Manifest.permission.READ_EXTERNAL_STORAGE })
+    }
+)
 public class FolderPickerPlugin extends Plugin {
 
     private static final String[] AUDIO_EXT = {
-        ".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".aiff", ".aif", ".wma", ".opus"
+        ".mp3", ".wav", ".flac", ".aac", ".m4a", ".mp4", ".ogg", ".oga", ".aiff", ".aif", ".wma", ".opus", ".webm"
     };
+    private static final String PREFS = "tempokey_audio_permissions";
+    private static final String REQUESTED = "requested";
+
+    private String permissionAlias() {
+        if (Build.VERSION.SDK_INT < 23) return "unsupported";
+        return Build.VERSION.SDK_INT >= 33 ? "audio33" : "storage32";
+    }
+
+    private String androidPermission() {
+        return Build.VERSION.SDK_INT >= 33
+            ? Manifest.permission.READ_MEDIA_AUDIO
+            : Manifest.permission.READ_EXTERNAL_STORAGE;
+    }
+
+    private String normalizedPermissionState() {
+        String alias = permissionAlias();
+        if ("unsupported".equals(alias)) return "granted";
+        PermissionState state = getPermissionState(alias);
+        if (state == PermissionState.GRANTED) return "granted";
+        boolean requested = getContext()
+            .getSharedPreferences(PREFS, 0)
+            .getBoolean(REQUESTED, false);
+        boolean rationale = ActivityCompat.shouldShowRequestPermissionRationale(
+            getActivity(),
+            androidPermission()
+        );
+        return requested && !rationale ? "blocked" : "denied";
+    }
+
+    @PluginMethod
+    public void checkAudioPermission(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("state", normalizedPermissionState());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestAudioPermission(PluginCall call) {
+        String alias = permissionAlias();
+        if ("unsupported".equals(alias)) {
+            JSObject ret = new JSObject();
+            ret.put("state", "granted");
+            call.resolve(ret);
+            return;
+        }
+        if (getPermissionState(alias) == PermissionState.GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("state", "granted");
+            call.resolve(ret);
+            return;
+        }
+        getContext().getSharedPreferences(PREFS, 0).edit().putBoolean(REQUESTED, true).apply();
+        requestPermissionForAlias(alias, call, "audioPermissionCallback");
+    }
+
+    @PermissionCallback
+    private void audioPermissionCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("state", normalizedPermissionState());
+        call.resolve(ret);
+    }
 
     @PluginMethod
     public void pickFolder(PluginCall call) {
@@ -304,6 +382,96 @@ public class FolderPickerPlugin extends Plugin {
         } finally {
             if (is != null) try { is.close(); } catch (Exception ignored) {}
         }
+    }
+
+    @PluginMethod
+    public void getPlayableUri(PluginCall call) {
+        String uriStr = call.getString("uri");
+        String name = call.getString("name", "audio");
+        String mime = call.getString("mime", "");
+        if (uriStr == null) { call.reject("MISSING_URI"); return; }
+        InputStream is = null;
+        FileOutputStream os = null;
+        try {
+            Uri uri = Uri.parse(uriStr);
+            is = getContext().getContentResolver().openInputStream(uri);
+            if (is == null) { call.reject("OPEN_FAIL"); return; }
+            String ext = extensionFromName(name);
+            if (ext.isEmpty()) ext = extensionFromMime(mime);
+            if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
+                mime = mimeFromExtension(ext);
+            }
+            String hash = sha1(uriStr);
+            String safe = sanitizeName(name);
+            if (safe.isEmpty()) safe = "audio";
+            if (!ext.isEmpty() && !safe.toLowerCase().endsWith("." + ext)) safe = safe + "." + ext;
+            File dir = new File(getContext().getCacheDir(), "tempokey-audio");
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, hash + "-" + safe);
+            os = new FileOutputStream(out, false);
+            byte[] chunk = new byte[128 * 1024];
+            int n;
+            while ((n = is.read(chunk)) > 0) os.write(chunk, 0, n);
+            os.flush();
+
+            JSObject ret = new JSObject();
+            ret.put("uri", Uri.fromFile(out).toString());
+            ret.put("mime", mime == null ? "" : mime);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("PLAYABLE_COPY_FAIL", e);
+        } finally {
+            if (os != null) try { os.close(); } catch (Exception ignored) {}
+            if (is != null) try { is.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private String extensionFromName(String name) {
+        if (name == null) return "";
+        int i = name.lastIndexOf('.');
+        if (i < 0 || i >= name.length() - 1) return "";
+        return name.substring(i + 1).toLowerCase();
+    }
+
+    private String extensionFromMime(String mime) {
+        if (mime == null) return "";
+        String ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime);
+        return ext == null ? "" : ext.toLowerCase();
+    }
+
+    private String mimeFromExtension(String ext) {
+        if (ext == null) return "";
+        switch (ext.toLowerCase()) {
+            case "mp3": return "audio/mpeg";
+            case "m4a":
+            case "mp4":
+            case "aac": return "audio/mp4";
+            case "wav": return "audio/wav";
+            case "flac": return "audio/flac";
+            case "ogg":
+            case "oga": return "audio/ogg";
+            case "opus": return "audio/ogg";
+            case "webm": return "audio/webm";
+            case "aiff":
+            case "aif": return "audio/aiff";
+            case "wma": return "audio/x-ms-wma";
+            default:
+                String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase());
+                return mime == null ? "" : mime;
+        }
+    }
+
+    private String sanitizeName(String name) {
+        if (name == null) return "";
+        return name.replaceAll("[^A-Za-z0-9._-]", "_");
+    }
+
+    private String sha1(String value) throws Exception {
+        MessageDigest md = MessageDigest.getInstance("SHA-1");
+        byte[] dig = md.digest(value.getBytes("UTF-8"));
+        StringBuilder sb = new StringBuilder();
+        for (byte b : dig) sb.append(String.format("%02x", b));
+        return sb.toString();
     }
 
     @PluginMethod
