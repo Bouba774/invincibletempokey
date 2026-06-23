@@ -125,6 +125,11 @@ export function getActiveTreeUri(): string | null {
   return window.localStorage.getItem(ACTIVE_TREE_KEY);
 }
 
+function getActiveTreeName(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(ACTIVE_TREE_NAME_KEY);
+}
+
 export function setActiveTreeUri(uri: string, name?: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(ACTIVE_TREE_KEY, uri);
@@ -302,8 +307,17 @@ export async function restoreAndroidFiles(
   entries?: Array<{ trackId: string; file: File }>;
 } | null> {
   if (!isCapacitorAndroid()) return null;
-  const meta = await loadAndroidLibrary(libId);
-  if (!meta) return null;
+  let meta = await loadAndroidLibrary(libId);
+  if (!meta) {
+    const activeTreeUri = getActiveTreeUri();
+    if (!activeTreeUri) return null;
+    meta = {
+      libId,
+      treeUri: activeTreeUri,
+      name: getActiveTreeName() || "Bibliothèque",
+      importedAt: 0,
+    };
+  }
   try {
     const { granted } = await FolderPicker.hasPersistedAccess({
       treeUri: meta.treeUri,
