@@ -319,6 +319,7 @@ export async function restoreAndroidFiles(
         trackId,
         file: safFileFromMeta(fileMeta),
       }));
+      setActiveTreeUri(meta.treeUri, meta.name);
       return {
         name: meta.name,
         treeUri: meta.treeUri,
@@ -356,18 +357,31 @@ export async function restoreFilesForLibrary(lib: Library): Promise<boolean> {
     return true;
   }
   const byPath = new Map<string, File>();
+  const byPathNoRoot = new Map<string, File>();
+  const byName = new Map<string, File>();
   for (const f of restored.files) {
     const p =
       (f as unknown as { webkitRelativePath?: string }).webkitRelativePath ||
       f.name;
     byPath.set(p, f);
+    const noRoot = p.includes("/") ? p.slice(p.indexOf("/") + 1) : p;
+    byPathNoRoot.set(noRoot, f);
+    byName.set(f.name, f);
   }
   const entries: Array<{ trackId: string; file: File }> = [];
   for (const t of lib.tracks) {
-    const f = byPath.get(t.filePath) ?? byPath.get(t.fileName);
+    const noRoot = t.filePath.includes("/")
+      ? t.filePath.slice(t.filePath.indexOf("/") + 1)
+      : t.filePath;
+    const f =
+      byPath.get(t.filePath) ??
+      byPathNoRoot.get(noRoot) ??
+      byPath.get(t.fileName) ??
+      byName.get(t.fileName);
     if (f) entries.push({ trackId: t.id, file: f });
   }
   if (entries.length === 0) return false;
   useLibraryStore.getState().setFiles(entries);
+  await persistAndroidLibrary(lib.id, restored.treeUri, restored.name, entries);
   return true;
 }
