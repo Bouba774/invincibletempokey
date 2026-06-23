@@ -118,7 +118,12 @@ function Home() {
   async function openFolderPicker() {
     if (isCapacitorAndroid()) {
       if (!hasPersistedGrant()) {
-        setPermissionDialog("request");
+        const state = await requestAudioPermission();
+        if (state !== "granted") {
+          setPermissionDialog(state === "blocked" ? "blocked" : "denied");
+          return;
+        }
+        await openAndroidFolderAfterPermission();
         return;
       }
       await openAndroidFolderAfterPermission();
