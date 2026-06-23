@@ -48,8 +48,10 @@ function computeOnsetEnvelope(samples: Float32Array, sampleRate: number): {
   odf: Float32Array;
   rate: number;
 } {
-  // Analyse a ~60 s window centred on the middle of the track.
-  const targetLen = Math.min(samples.length, Math.floor(sampleRate * 60));
+  // Analyse a ~90 s window centred on the middle of the track. The
+  // FFT-based autocorrelation below stays well under 30 ms even at this
+  // length, so we get the extra robustness for free.
+  const targetLen = Math.min(samples.length, Math.floor(sampleRate * 90));
   const offset = Math.max(0, Math.floor((samples.length - targetLen) / 2));
   const frames = Math.max(0, Math.floor((targetLen - FFT_SIZE) / HOP));
   if (frames < 64) return { odf: new Float32Array(0), rate: sampleRate / HOP };
