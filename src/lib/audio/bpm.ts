@@ -48,8 +48,10 @@ function computeOnsetEnvelope(samples: Float32Array, sampleRate: number): {
   odf: Float32Array;
   rate: number;
 } {
-  // Analyse a ~60 s window centred on the middle of the track.
-  const targetLen = Math.min(samples.length, Math.floor(sampleRate * 60));
+  // Analyse a ~90 s window centred on the middle of the track. The
+  // FFT-based autocorrelation below stays well under 30 ms even at this
+  // length, so we get the extra robustness for free.
+  const targetLen = Math.min(samples.length, Math.floor(sampleRate * 90));
   const offset = Math.max(0, Math.floor((samples.length - targetLen) / 2));
   const frames = Math.max(0, Math.floor((targetLen - FFT_SIZE) / HOP));
   if (frames < 64) return { odf: new Float32Array(0), rate: sampleRate / HOP };
@@ -159,15 +161,31 @@ export function estimateBPM(samples: Float32Array, sampleRate: number): BpmEstim
   const minLag = Math.max(2, Math.floor((60 * rate) / MAX_BPM));
   const maxLag = Math.min(odf.length - 1, Math.floor((60 * rate) / MIN_BPM));
 
-  // Plain autocorrelation. The signal is short (~5k samples) so O(N²) is fine.
+  // FFT-based autocorrelation (Wiener-Khinchin theorem). This is exactly
+  // the path taken by the Vamp FixedTempoEstimator plugin used by DiscDJ
+  // and lets us analyse a longer window without slowing the import down.
+  let nfft = 1;
+  while (nfft < odf.length * 2) nfft <<= 1;
+  const re = new Float32Array(nfft);
+  const im = new Float32Array(nfft);
+  for (let i = 0; i < odf.length; i++) re[i] = odf[i];
+  fftInPlace(re, im);
+  for (let i = 0; i < nfft; i++) {
+    re[i] = re[i] * re[i] + im[i] * im[i];
+    im[i] = 0;
+  }
+  // Inverse FFT via conjugation trick.
+  for (let i = 0; i < nfft; i++) im[i] = -im[i];
+  fftInPlace(re, im);
+  const invN = 1 / nfft;
   const acf = new Float32Array(maxLag + 1);
   let acfMax = 0;
   for (let lag = minLag; lag <= maxLag; lag++) {
-    let acc = 0;
-    const end = odf.length - lag;
-    for (let i = 0; i < end; i++) acc += odf[i] * odf[i + lag];
-    acf[lag] = acc;
-    if (acc > acfMax) acfMax = acc;
+    // Unbiased estimate: normalize by the number of overlapping samples.
+    const overlap = odf.length - lag;
+    const v = overlap > 0 ? (re[lag] * invN) / overlap : 0;
+    acf[lag] = v;
+    if (v > acfMax) acfMax = v;
   }
   if (acfMax <= 0) return empty;
 
@@ -188,10 +206,13 @@ export function estimateBPM(samples: Float32Array, sampleRate: number): BpmEstim
     }
     const bpm = bpmFromLag(lag);
     if (bpm < MIN_BPM || bpm > MAX_BPM) continue;
-    // Prefer DJ window: gentle gaussian centred at 125 BPM.
-    const dist = (bpm - 125) / 60;
-    const prior = Math.exp(-0.5 * dist * dist);
-    const inside = bpm >= DJ_PREF_MIN && bpm <= DJ_PREF_MAX ? 1.0 : 0.7;
+    // Log-Gaussian tempo prior centred at 120 BPM — the exact bias used
+    // by the Vamp FixedTempoEstimator plugin shipped with DiscDJ. It is
+    // symmetric in the half/double-tempo sense (a track at 60 and one at
+    // 240 BPM are pulled toward 120 with the same strength).
+    const logDist = Math.log(bpm / 120);
+    const prior = Math.exp(-0.5 * (logDist / 0.55) * (logDist / 0.55));
+    const inside = bpm >= DJ_PREF_MIN && bpm <= DJ_PREF_MAX ? 1.0 : 0.75;
     candidates.push({ bpm, lag, score: s * prior * inside });
   }
   if (candidates.length === 0) return empty;
@@ -210,9 +231,9 @@ export function estimateBPM(samples: Float32Array, sampleRate: number): BpmEstim
   let bestVarScore = -Infinity;
   for (const b of variants) {
     if (b < MIN_BPM || b > MAX_BPM) continue;
-    const dist = (b - 125) / 60;
-    const prior = Math.exp(-0.5 * dist * dist);
-    const inside = b >= DJ_PREF_MIN && b <= DJ_PREF_MAX ? 1.0 : 0.7;
+    const logDist = Math.log(b / 120);
+    const prior = Math.exp(-0.5 * (logDist / 0.55) * (logDist / 0.55));
+    const inside = b >= DJ_PREF_MIN && b <= DJ_PREF_MAX ? 1.0 : 0.75;
     // Reuse the comb score of the nearest lag.
     const lag = Math.max(minLag, Math.min(maxLag, Math.round((60 * rate) / b)));
     let s = 0;
