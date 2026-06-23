@@ -12,10 +12,16 @@ export interface SafFileMeta {
 }
 
 export interface FolderPickerPlugin {
+  checkAudioPermission(): Promise<{ state: "granted" | "denied" | "blocked" | "unsupported" }>;
+  requestAudioPermission(): Promise<{ state: "granted" | "denied" | "blocked" | "unsupported" }>;
   pickFolder(): Promise<{ treeUri: string; name: string }>;
   listAudioFiles(opts: { treeUri: string }): Promise<{
     rootName: string;
     files: SafFileMeta[];
+  }>;
+  getPlayableUri(opts: { uri: string; name?: string; mime?: string }): Promise<{
+    uri: string;
+    mime: string;
   }>;
   readFile(opts: { uri: string; offset?: number; length?: number }): Promise<{
     data: string;
@@ -46,21 +52,55 @@ interface AndroidLibraryMeta {
   treeUri: string;
   name: string;
   importedAt: number;
+  fileMetas?: Array<{ trackId: string; meta: SafFileMeta }>;
+}
+
+export function getSafMeta(file: File | undefined | null): SafFileMeta | null {
+  if (!file) return null;
+  const v = (file as unknown as { __safMeta?: unknown }).__safMeta;
+  if (v && typeof v === "object") return v as SafFileMeta;
+  return null;
 }
 
 export async function persistAndroidLibrary(
   libId: string,
   treeUri: string,
   name: string,
+  entries?: Array<{ trackId: string; file: File }>,
 ): Promise<void> {
   try {
+    const fileMetas = entries
+      ?.map(({ trackId, file }) => {
+        const meta = getSafMeta(file);
+        return meta ? { trackId, meta } : null;
+      })
+      .filter((v): v is { trackId: string; meta: SafFileMeta } => !!v);
     const rec: AndroidLibraryMeta = {
       libId,
       treeUri,
       name,
       importedAt: Date.now(),
+      fileMetas,
     };
     await idbSet(`saf:${libId}`, rec, safStore);
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function updateAndroidTrackFileMeta(
+  libId: string,
+  trackId: string,
+  meta: SafFileMeta,
+): Promise<void> {
+  try {
+    const rec = await loadAndroidLibrary(libId);
+    if (!rec) return;
+    const fileMetas = [...(rec.fileMetas ?? [])];
+    const i = fileMetas.findIndex((x) => x.trackId === trackId);
+    if (i >= 0) fileMetas[i] = { trackId, meta };
+    else fileMetas.push({ trackId, meta });
+    await idbSet(`saf:${libId}`, { ...rec, fileMetas }, safStore);
   } catch {
     /* best-effort */
   }
@@ -236,7 +276,12 @@ export async function pickAndroidFolder(): Promise<{
  */
 export async function restoreAndroidFiles(
   libId: string,
-): Promise<{ name: string; treeUri: string; files: File[] } | null> {
+): Promise<{
+  name: string;
+  treeUri: string;
+  files: File[];
+  entries?: Array<{ trackId: string; file: File }>;
+} | null> {
   if (!isCapacitorAndroid()) return null;
   const meta = await loadAndroidLibrary(libId);
   if (!meta) return null;
@@ -245,6 +290,24 @@ export async function restoreAndroidFiles(
       treeUri: meta.treeUri,
     });
     if (!granted) return null;
+
+    // Preferred cold-start path: rebuild the exact trackId → SAF document URI
+    // mapping saved during import. This avoids fragile full-tree re-scans and
+    // path matching when the app is reopened, so playback/rename works without
+    // asking the user to re-import the library.
+    if (meta.fileMetas && meta.fileMetas.length > 0) {
+      const entries = meta.fileMetas.map(({ trackId, meta: fileMeta }) => ({
+        trackId,
+        file: safFileFromMeta(fileMeta),
+      }));
+      return {
+        name: meta.name,
+        treeUri: meta.treeUri,
+        files: entries.map((e) => e.file),
+        entries,
+      };
+    }
+
     const { rootName, files: metas } = await FolderPicker.listAudioFiles({
       treeUri: meta.treeUri,
     });
@@ -269,6 +332,10 @@ export async function restoreAndroidFiles(
 export async function restoreFilesForLibrary(lib: Library): Promise<boolean> {
   const restored = await restoreAndroidFiles(lib.id);
   if (!restored) return false;
+  if (restored.entries && restored.entries.length > 0) {
+    useLibraryStore.getState().setFiles(restored.entries);
+    return true;
+  }
   const byPath = new Map<string, File>();
   for (const f of restored.files) {
     const p =
