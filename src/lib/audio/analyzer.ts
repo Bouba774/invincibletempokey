@@ -58,15 +58,6 @@ export interface AnalyzeOptions {
 const DJ_PREF_MIN = 85;
 const DJ_PREF_MAX = 175;
 
-function pcDistance(a: number, b: number): number {
-  const d = Math.abs(a - b) % 12;
-  return Math.min(d, 12 - d);
-}
-
-const NOTE_NAMES_SHARP = [
-  "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-];
-
 function humanKeyLabel(note: string, scale: "major" | "minor"): string {
   const cap = scale === "major" ? "Major" : "Minor";
   return `${note} ${cap}`;
