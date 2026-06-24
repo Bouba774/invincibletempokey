@@ -140,6 +140,7 @@ import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import org.json.JSONObject;
 
 @CapacitorPlugin(
     name = "FolderPicker",
@@ -413,6 +414,85 @@ public class FolderPickerPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("READ_FAIL", e);
         } finally {
+            if (is != null) try { is.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    @PluginMethod
+    public void persistAudioFiles(PluginCall call) {
+        String libraryId = call.getString("libraryId", "library");
+        JSArray input = call.getArray("files");
+        if (input == null) { call.reject("MISSING_FILES"); return; }
+
+        File dir = new File(getContext().getFilesDir(), "tempokey-audio/" + sanitizeName(libraryId));
+        if (!dir.exists() && !dir.mkdirs()) {
+            call.reject("STORE_DIR_FAIL");
+            return;
+        }
+
+        JSArray entries = new JSArray();
+        try {
+            for (int i = 0; i < input.length(); i++) {
+                JSONObject item = input.getJSONObject(i);
+                String trackId = item.optString("trackId", "");
+                JSONObject meta = item.optJSONObject("meta");
+                if (trackId.isEmpty() || meta == null) continue;
+
+                String uriStr = meta.optString("uri", "");
+                String name = meta.optString("name", "audio");
+                String relativePath = meta.optString("relativePath", name);
+                String mime = meta.optString("mime", "");
+                long size = meta.optLong("size", 0L);
+                if (uriStr.isEmpty()) continue;
+
+                String ext = extensionFromName(name);
+                if (ext.isEmpty()) ext = extensionFromMime(mime);
+                if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
+                    mime = mimeFromExtension(ext);
+                }
+                String safe = sanitizeName(trackId + "-" + name);
+                if (safe.isEmpty()) safe = sha1(trackId + uriStr);
+                if (!ext.isEmpty() && !safe.toLowerCase().endsWith("." + ext)) safe = safe + "." + ext;
+                File out = new File(dir, safe);
+
+                copyUriToFile(Uri.parse(uriStr), out, size);
+
+                JSObject nextMeta = new JSObject();
+                nextMeta.put("uri", uriStr);
+                nextMeta.put("storedUri", Uri.fromFile(out).toString());
+                nextMeta.put("name", name);
+                nextMeta.put("relativePath", relativePath);
+                nextMeta.put("size", out.length() > 0L ? out.length() : size);
+                nextMeta.put("mime", mime == null ? "" : mime);
+
+                JSObject entry = new JSObject();
+                entry.put("trackId", trackId);
+                entry.put("meta", nextMeta);
+                entries.put(entry);
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("entries", entries);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("PERSIST_AUDIO_FAIL", e);
+        }
+    }
+
+    private void copyUriToFile(Uri src, File out, long expectedSize) throws Exception {
+        if (out.exists() && out.length() > 0L && (expectedSize <= 0L || out.length() == expectedSize)) return;
+        InputStream is = null;
+        FileOutputStream os = null;
+        try {
+            is = getContext().getContentResolver().openInputStream(src);
+            if (is == null) throw new Exception("OPEN_FAIL");
+            os = new FileOutputStream(out, false);
+            byte[] chunk = new byte[256 * 1024];
+            int n;
+            while ((n = is.read(chunk)) > 0) os.write(chunk, 0, n);
+            os.flush();
+        } finally {
+            if (os != null) try { os.close(); } catch (Exception ignored) {}
             if (is != null) try { is.close(); } catch (Exception ignored) {}
         }
     }
