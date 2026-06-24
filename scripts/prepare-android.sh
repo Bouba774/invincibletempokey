@@ -136,6 +136,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -388,8 +389,7 @@ public class FolderPickerPlugin extends Plugin {
         InputStream is = null;
         try {
             Uri uri = Uri.parse(uriStr);
-            is = getContext().getContentResolver().openInputStream(uri);
-            if (is == null) { call.reject("OPEN_FAIL"); return; }
+            is = openUriInputStream(uri);
             long skipped = 0;
             while (skipped < offset) {
                 long s = is.skip(offset - skipped);
@@ -484,8 +484,7 @@ public class FolderPickerPlugin extends Plugin {
         InputStream is = null;
         FileOutputStream os = null;
         try {
-            is = getContext().getContentResolver().openInputStream(src);
-            if (is == null) throw new Exception("OPEN_FAIL");
+            is = openUriInputStream(src);
             os = new FileOutputStream(out, false);
             byte[] chunk = new byte[256 * 1024];
             int n;
@@ -495,6 +494,18 @@ public class FolderPickerPlugin extends Plugin {
             if (os != null) try { os.close(); } catch (Exception ignored) {}
             if (is != null) try { is.close(); } catch (Exception ignored) {}
         }
+    }
+
+    private InputStream openUriInputStream(Uri uri) throws Exception {
+        if (uri == null) throw new Exception("MISSING_URI");
+        if ("file".equals(uri.getScheme())) {
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) throw new Exception("OPEN_FAIL");
+            return new FileInputStream(new File(path));
+        }
+        InputStream is = getContext().getContentResolver().openInputStream(uri);
+        if (is == null) throw new Exception("OPEN_FAIL");
+        return is;
     }
 
     @PluginMethod
@@ -508,8 +519,7 @@ public class FolderPickerPlugin extends Plugin {
         FileOutputStream os = null;
         try {
             Uri uri = Uri.parse(uriStr);
-            is = getContext().getContentResolver().openInputStream(uri);
-            if (is == null) { call.reject("OPEN_FAIL"); return; }
+            is = openUriInputStream(uri);
             String ext = extensionFromName(name);
             if (ext.isEmpty()) ext = extensionFromMime(mime);
             if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
