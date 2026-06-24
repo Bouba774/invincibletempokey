@@ -67,16 +67,17 @@ async function applyRenameAndroid(
       continue;
     }
     try {
+      const meta = (file as unknown as { __safMeta?: SafFileMeta }).__safMeta;
       const { uri: newUri } = await FolderPicker.renameDocument({
-        uri,
+        uri: meta?.storedUri || uri,
         newName: item.newName,
       });
       // Refresh in-memory File handle so subsequent ops (incl. undo) work.
-      const meta = (file as unknown as { __safMeta?: SafFileMeta }).__safMeta;
       if (meta) {
         const updated: SafFileMeta = {
           ...meta,
-          uri: newUri,
+          uri: meta.storedUri ? meta.uri : newUri,
+          storedUri: meta.storedUri ? newUri : meta.storedUri,
           name: item.newName,
           relativePath: replaceLastSegment(meta.relativePath, item.newName),
         };
