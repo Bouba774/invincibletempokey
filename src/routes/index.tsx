@@ -10,21 +10,21 @@ import { useAnalysisStore } from "@/lib/analysis-store";
 import { ImportProgressModal } from "@/components/ImportProgressModal";
 import {
   FolderPlus,
-  Activity,
-  Music2,
-  Compass,
-  Shuffle,
-  ListOrdered,
-  Layers,
-  Pencil,
-  CopyCheck,
-  Search,
-  ShieldCheck,
-  WifiOff,
-  Cloud,
-  Database,
+  AudioWaveform,
+  KeyRound,
+  Disc3,
+  Waves,
+  ArrowDownUp,
+  Blocks,
+  Wand2,
+  ScanSearch,
+  Telescope,
+  LockKeyhole,
+  PlugZap,
+  CloudOff,
+  HardDrive,
   Headphones,
-  ArrowRight,
+  ArrowUpRight,
 } from "lucide-react";
 import logoUrl from "@/assets/tempokey-logo.png";
 import {
@@ -64,22 +64,22 @@ export const Route = createFileRoute("/")({
 });
 
 const FEATURES = [
-  { icon: Activity, title: "Détection BPM", desc: "Tempo précis pour chaque morceau." },
-  { icon: Music2, title: "Tonalité", desc: "Analyse musicale automatique." },
-  { icon: Compass, title: "Notation Camelot", desc: "Roue harmonique standard DJ." },
-  { icon: Shuffle, title: "Harmonic Mixing", desc: "Suggestions compatibles en un coup d'œil." },
-  { icon: ListOrdered, title: "Auto Mix Order", desc: "Tri intelligent pour enchaîner sans accroc." },
-  { icon: Layers, title: "Set Builder", desc: "Warm-up, Peak, Closing structurés." },
-  { icon: Pencil, title: "Renommage intelligent", desc: "Templates DJ + undo complet." },
-  { icon: CopyCheck, title: "Doublons", desc: "Détection exacte et approximative." },
-  { icon: Search, title: "Recherche avancée", desc: "Filtres BPM, clé, durée, mots-clés." },
+  { icon: AudioWaveform, title: "Détection BPM", desc: "Tempo précis pour chaque morceau." },
+  { icon: KeyRound, title: "Tonalité", desc: "Analyse musicale automatique." },
+  { icon: Disc3, title: "Notation Camelot", desc: "Roue harmonique standard DJ." },
+  { icon: Waves, title: "Harmonic Mixing", desc: "Suggestions compatibles en un coup d'œil." },
+  { icon: ArrowDownUp, title: "Auto Mix Order", desc: "Tri intelligent pour enchaîner sans accroc." },
+  { icon: Blocks, title: "Set Builder", desc: "Warm-up, Peak, Closing structurés." },
+  { icon: Wand2, title: "Renommage intelligent", desc: "Templates DJ + undo complet." },
+  { icon: ScanSearch, title: "Doublons", desc: "Détection exacte et approximative." },
+  { icon: Telescope, title: "Recherche avancée", desc: "Filtres BPM, clé, durée, mots-clés." },
 ];
 
 const BENEFITS = [
-  { icon: ShieldCheck, label: "100% local" },
-  { icon: WifiOff, label: "Aucune connexion" },
-  { icon: Cloud, label: "Zéro cloud" },
-  { icon: Database, label: "Bibliothèques massives" },
+  { icon: LockKeyhole, label: "100% local" },
+  { icon: PlugZap, label: "Aucune connexion" },
+  { icon: CloudOff, label: "Zéro cloud" },
+  { icon: HardDrive, label: "Bibliothèques massives" },
   { icon: Headphones, label: "Pensé pour DJs" },
 ];
 
