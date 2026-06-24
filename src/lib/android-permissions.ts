@@ -12,24 +12,12 @@
  * No business logic is touched — this only mediates the consent UX.
  */
 
-import { FolderPicker } from "@/lib/native/folder-picker";
+import { FolderPicker, isCapacitorAndroid } from "@/lib/native/folder-picker";
 
 export type AudioPermissionStatus = "granted" | "denied" | "blocked" | "unsupported";
 
-// Hide Capacitor module specifiers from the web bundler (rolldown). The
-// packages are only installed during the Android build pipeline.
-const dynImport = (name: string): Promise<any> =>
-  // eslint-disable-next-line @typescript-eslint/no-implied-eval
-  (0, eval)(`import(${JSON.stringify(name)})`);
-const safeImport = (name: string): Promise<any> =>
-  dynImport(name).catch(() => null);
-
 export async function isNativeAndroid(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  const mod = await safeImport("@capacitor/core");
-  const Capacitor = mod?.Capacitor;
-  if (!Capacitor?.isNativePlatform?.()) return false;
-  return Capacitor.getPlatform?.() === "android";
+  return typeof window !== "undefined" && isCapacitorAndroid();
 }
 
 /**
@@ -40,12 +28,6 @@ export async function isNativeAndroid(): Promise<boolean> {
  */
 export async function requestAudioPermission(): Promise<AudioPermissionStatus> {
   if (!(await isNativeAndroid())) return "granted";
-
-  if (!FolderPicker?.requestAudioPermission) {
-    // Plugin missing in web/dev; keep local preview usable. In the APK the
-    // native plugin is required and will show Android's real runtime dialog.
-    return "granted";
-  }
 
   try {
     const current = await FolderPicker.checkAudioPermission().catch(() => null);
