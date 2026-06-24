@@ -316,7 +316,9 @@ export async function persistAndroidImportedFiles(
       return meta ? { trackId, meta } : null;
     })
     .filter((v): v is { trackId: string; meta: SafFileMeta } => !!v);
-  if (files.length === 0 || !FolderPicker?.persistAudioFiles) return entries;
+  if (files.length !== entries.length || !FolderPicker?.persistAudioFiles) {
+    throw new Error("Stockage Android durable indisponible");
+  }
 
   try {
     const res = await FolderPicker.persistAudioFiles({ libraryId: libId, files });
@@ -326,16 +328,16 @@ export async function persistAndroidImportedFiles(
         replacements.set(item.trackId, safFileFromMeta(item.meta));
       }
     }
-    if (replacements.size === 0) return entries;
+    if (replacements.size !== entries.length) {
+      throw new Error("Stockage Android incomplet");
+    }
     return entries.map((entry) => ({
       trackId: entry.trackId,
       file: replacements.get(entry.trackId) ?? entry.file,
     }));
   } catch (err) {
-    // Keep import usable even if the durable copy fails on a specific device;
-    // the SAF grant remains as fallback and restoreFilesForLibrary will retry.
     console.warn("[tempokey] android durable audio copy failed", err);
-    return entries;
+    throw err;
   }
 }
 
