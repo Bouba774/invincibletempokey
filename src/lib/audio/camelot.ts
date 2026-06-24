@@ -41,3 +41,15 @@ export function toCamelot(key: KeyResult): string | null {
   if (pc === undefined) return null;
   return (key.mode === "major" ? MAJOR : MINOR)[pc] ?? null;
 }
+
+/** Camelot lookup from a raw note + mode pair (works with Essentia output). */
+export function camelotFor(note: string, mode: "major" | "minor"): string | null {
+  const pc = NOTE_TO_PC[note];
+  if (pc === undefined) return null;
+  return (mode === "major" ? MAJOR : MINOR)[pc] ?? null;
+}
+
+export function noteToPc(note: string): number | null {
+  const pc = NOTE_TO_PC[note];
+  return pc === undefined ? null : pc;
+}
