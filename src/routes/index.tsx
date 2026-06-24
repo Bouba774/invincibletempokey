@@ -347,7 +347,7 @@ function Home() {
                     {lastMeta!.trackCount.toLocaleString("fr-FR")} morceaux
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
               </div>
             </button>
           ) : (
