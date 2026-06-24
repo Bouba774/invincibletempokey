@@ -233,9 +233,24 @@ public class FolderPickerPlugin extends Plugin {
     public void pickFolder(PluginCall call) {
         String alias = permissionAlias();
         if (!"unsupported".equals(alias) && getPermissionState(alias) != PermissionState.GRANTED) {
-            call.reject("AUDIO_PERMISSION_REQUIRED");
+            getContext().getSharedPreferences(PREFS, 0).edit().putBoolean(REQUESTED, true).apply();
+            requestPermissionForAlias(alias, call, "pickFolderPermissionCallback");
             return;
         }
+        openDocumentTree(call);
+    }
+
+    @PermissionCallback
+    private void pickFolderPermissionCallback(PluginCall call) {
+        String alias = permissionAlias();
+        if ("unsupported".equals(alias) || getPermissionState(alias) == PermissionState.GRANTED) {
+            openDocumentTree(call);
+            return;
+        }
+        call.reject("AUDIO_PERMISSION_DENIED");
+    }
+
+    private void openDocumentTree(PluginCall call) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION
