@@ -38,6 +38,7 @@ import {
 import {
   isCapacitorAndroid,
   pickAndroidFolder,
+  persistAndroidImportedFiles,
   persistAndroidLibrary,
   restoreFilesForLibrary,
 } from "@/lib/native/folder-picker";
@@ -212,12 +213,17 @@ function Home() {
         });
         return;
       }
+      let durableEntries = fileEntries;
+      if (androidTreeUri) {
+        setProgress({ phase: "store", scanned: 0, total: lib.tracks.length });
+        durableEntries = await persistAndroidImportedFiles(lib.id, fileEntries);
+      }
       resetAnalysis();
       await setLibrary(lib);
       if (androidTreeUri) {
-        await persistAndroidLibrary(lib.id, androidTreeUri, lib.name, fileEntries);
+        await persistAndroidLibrary(lib.id, androidTreeUri, lib.name, durableEntries);
       }
-      setFiles(fileEntries);
+      setFiles(durableEntries);
       setProgress({ phase: "done", scanned: lib.tracks.length, total: lib.tracks.length });
       toast.success(`${lib.tracks.length.toLocaleString()} morceaux importés`, {
         description: lib.name,
