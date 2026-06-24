@@ -43,7 +43,11 @@ export async function resampleTo44k(
     );
     const oac = new OAC(1, targetLen, TARGET_SR);
     const buf = oac.createBuffer(1, samples.length, sourceRate);
-    buf.copyToChannel(samples, 0);
+    // Ensure a plain ArrayBuffer-backed view (not SharedArrayBuffer) so the
+    // strict TS lib types accept the call.
+    const safe = new Float32Array(samples.length);
+    safe.set(samples);
+    buf.copyToChannel(safe, 0);
     const src = oac.createBufferSource();
     src.buffer = buf;
     src.connect(oac.destination);
