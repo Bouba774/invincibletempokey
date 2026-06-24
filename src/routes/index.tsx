@@ -294,36 +294,24 @@ function Home() {
               style={{ boxShadow: "var(--shadow-elegant)" }}
             />
           </div>
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--surface-elevated)]/70 px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            <Sparkles className="h-3 w-3 text-[var(--accent)]" />
-            Outil DJ · 100% local
-          </div>
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             TempoKey
           </h1>
-          <p className="mt-3 text-[15px] font-medium text-foreground/90 leading-relaxed">
+          <p className="mx-auto mt-3 max-w-[280px] text-[13.5px] font-medium text-foreground/90 leading-snug">
             Analysez, organisez et optimisez votre bibliothèque DJ — localement.
           </p>
-          <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-            Détection BPM, tonalités, Camelot, Harmonic Mixing et organisation intelligente.
+          <p className="mx-auto mt-1.5 max-w-[280px] text-[12px] text-muted-foreground leading-snug">
+            BPM, tonalités, Camelot, Harmonic Mixing.
           </p>
 
-          <div className="mt-7 w-full max-w-sm space-y-3">
+          <div className="mt-6 w-full max-w-[300px] space-y-3">
             <button
               onClick={pickFolder}
-              className="press flex h-14 w-full items-center justify-center gap-2 rounded-2xl text-[15px] font-semibold text-[var(--primary-foreground)]"
+              className="press hover-scale flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-[var(--primary-foreground)] animate-fade-in"
               style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-glow)" }}
             >
-              <FolderPlus className="h-5 w-5" />
+              <FolderPlus className="h-[18px] w-[18px]" />
               Importer une bibliothèque audio
-            </button>
-            <button
-              onClick={openLast}
-              disabled={!hasRecent}
-              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-border bg-[var(--surface-elevated)] text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              {hasRecent ? `Ouvrir « ${lastMeta!.name} »` : "Aucune bibliothèque récente"}
             </button>
           </div>
         </div>
