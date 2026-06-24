@@ -16,8 +16,6 @@ import { FolderPicker } from "@/lib/native/folder-picker";
 
 export type AudioPermissionStatus = "granted" | "denied" | "blocked" | "unsupported";
 
-const PERSIST_KEY = "tempokey.audio-permission.granted";
-
 // Hide Capacitor module specifiers from the web bundler (rolldown). The
 // packages are only installed during the Android build pipeline.
 const dynImport = (name: string): Promise<any> =>
@@ -34,36 +32,18 @@ export async function isNativeAndroid(): Promise<boolean> {
   return Capacitor.getPlatform?.() === "android";
 }
 
-export function hasPersistedGrant(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(PERSIST_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function persistGrant() {
-  try {
-    window.localStorage.setItem(PERSIST_KEY, "1");
-  } catch {
-    /* ignore */
-  }
-}
-
 /**
- * Request the Android audio-file access permission. Returns "granted" when
- * the user accepts (or when no runtime grant is needed, e.g. SAF picker),
- * "denied" when the user declines once, and "blocked" when Android marks
- * the permission as never-ask-again.
+ * Request the Android audio-file access permission exactly when the user
+ * starts the first library import. Returns "granted" when the user accepts,
+ * "denied" when the user declines once, and "blocked" when Android marks the
+ * permission as never-ask-again.
  */
 export async function requestAudioPermission(): Promise<AudioPermissionStatus> {
   if (!(await isNativeAndroid())) return "granted";
 
   if (!FolderPicker?.requestAudioPermission) {
-    // Plugin missing in web/dev; the SAF picker still provides access to the
-    // selected folder, so do not block the import flow.
-    persistGrant();
+    // Plugin missing in web/dev; keep local preview usable. In the APK the
+    // native plugin is required and will show Android's real runtime dialog.
     return "granted";
   }
 
@@ -71,26 +51,21 @@ export async function requestAudioPermission(): Promise<AudioPermissionStatus> {
     const current = await FolderPicker.checkAudioPermission().catch(() => null);
     const currentState = current?.state;
     if (currentState === "granted") {
-      persistGrant();
       return "granted";
     }
 
     const res = await FolderPicker.requestAudioPermission();
     const state = res?.state as AudioPermissionStatus | undefined;
     if (state === "granted") {
-      persistGrant();
       return "granted";
     }
     if (state === "blocked") return "blocked";
     if (state === "unsupported") {
-      persistGrant();
       return "granted";
     }
     return "denied";
   } catch {
-    // Permission API not available on this Android version — SAF still works.
-    persistGrant();
-    return "granted";
+    return "denied";
   }
 }
 

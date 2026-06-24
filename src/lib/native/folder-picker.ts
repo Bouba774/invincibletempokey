@@ -5,6 +5,7 @@ import { useLibraryStore } from "@/lib/library-store";
 
 export interface SafFileMeta {
   uri: string;
+  storedUri?: string;
   name: string;
   relativePath: string;
   size: number;
@@ -19,6 +20,12 @@ export interface FolderPickerPlugin {
   listAudioFiles(opts: { treeUri: string }): Promise<{
     rootName: string;
     files: SafFileMeta[];
+  }>;
+  persistAudioFiles(opts: {
+    libraryId: string;
+    files: Array<{ trackId: string; meta: SafFileMeta }>;
+  }): Promise<{
+    entries: Array<{ trackId: string; meta: SafFileMeta }>;
   }>;
   getPlayableUri(opts: { uri: string; name?: string; mime?: string; size?: number }): Promise<{
     uri: string;
@@ -177,7 +184,13 @@ export function safFileFromMeta(meta: SafFileMeta): File {
 
   const fullArrayBuffer = async (): Promise<ArrayBuffer> => {
     if (cached) return cached;
-    const { data } = await FolderPicker.readFile({ uri: meta.uri });
+    let data: string;
+    try {
+      ({ data } = await FolderPicker.readFile({ uri: meta.storedUri || meta.uri }));
+    } catch (err) {
+      if (!meta.storedUri) throw err;
+      ({ data } = await FolderPicker.readFile({ uri: meta.uri }));
+    }
     cached = base64ToArrayBuffer(data);
     return cached;
   };
@@ -188,11 +201,21 @@ export function safFileFromMeta(meta: SafFileMeta): File {
   ): Promise<ArrayBuffer> => {
     const length = Math.max(0, end - start);
     if (length === 0) return new ArrayBuffer(0);
-    const { data } = await FolderPicker.readFile({
-      uri: meta.uri,
-      offset: start,
-      length,
-    });
+    let data: string;
+    try {
+      ({ data } = await FolderPicker.readFile({
+        uri: meta.storedUri || meta.uri,
+        offset: start,
+        length,
+      }));
+    } catch (err) {
+      if (!meta.storedUri) throw err;
+      ({ data } = await FolderPicker.readFile({
+        uri: meta.uri,
+        offset: start,
+        length,
+      }));
+    }
     return base64ToArrayBuffer(data);
   };
 
@@ -250,16 +273,72 @@ export async function getSafPlayableUrl(
   const uri = getSafUri(file);
   if (!uri) return null;
   const meta = getSafMeta(file);
-  const res = await FolderPicker.getPlayableUri({
-    uri,
-    name: file.name || meta?.name,
-    mime: file.type || meta?.mime,
-    size: file.size || meta?.size,
-  });
+  const sourceUri = meta?.storedUri || uri;
+  let res: { uri: string; mime: string };
+  try {
+    res = await FolderPicker.getPlayableUri({
+      uri: sourceUri,
+      name: file.name || meta?.name,
+      mime: file.type || meta?.mime,
+      size: file.size || meta?.size,
+    });
+  } catch (err) {
+    if (!meta?.storedUri) throw err;
+    res = await FolderPicker.getPlayableUri({
+      uri,
+      name: file.name || meta.name,
+      mime: file.type || meta.mime,
+      size: file.size || meta.size,
+    });
+  }
   return {
     url: Capacitor.convertFileSrc?.(res.uri) ?? res.uri,
     mime: res.mime || file.type || meta?.mime || "",
   };
+}
+
+/**
+ * Android-only durable import step. The SAF URI permission is useful, but it
+ * is still an external grant that can be slow, provider-dependent, or revoked.
+ * To behave like a native music player, copy every imported audio file into
+ * TempoKey's private app storage during the first import, then persist the
+ * trackId → stored file mapping. Playback and analysis after an app restart no
+ * longer depend on transient WebView File objects or re-importing the folder.
+ */
+export async function persistAndroidImportedFiles(
+  libId: string,
+  entries: Array<{ trackId: string; file: File }>,
+): Promise<Array<{ trackId: string; file: File }>> {
+  if (!isCapacitorAndroid() || entries.length === 0) return entries;
+  const files = entries
+    .map(({ trackId, file }) => {
+      const meta = getSafMeta(file);
+      return meta ? { trackId, meta } : null;
+    })
+    .filter((v): v is { trackId: string; meta: SafFileMeta } => !!v);
+  if (files.length !== entries.length || !FolderPicker?.persistAudioFiles) {
+    throw new Error("Stockage Android durable indisponible");
+  }
+
+  try {
+    const res = await FolderPicker.persistAudioFiles({ libraryId: libId, files });
+    const replacements = new Map<string, File>();
+    for (const item of res.entries ?? []) {
+      if (item?.trackId && item.meta) {
+        replacements.set(item.trackId, safFileFromMeta(item.meta));
+      }
+    }
+    if (replacements.size !== entries.length) {
+      throw new Error("Stockage Android incomplet");
+    }
+    return entries.map((entry) => ({
+      trackId: entry.trackId,
+      file: replacements.get(entry.trackId) ?? entry.file,
+    }));
+  } catch (err) {
+    console.warn("[tempokey] android durable audio copy failed", err);
+    throw err;
+  }
 }
 
 export async function pickAndroidFolder(): Promise<{
@@ -319,28 +398,37 @@ export async function restoreAndroidFiles(
     };
   }
   try {
-    const { granted } = await FolderPicker.hasPersistedAccess({
-      treeUri: meta.treeUri,
-    });
-    if (!granted) return null;
-
     // Preferred cold-start path: rebuild the exact trackId → SAF document URI
-    // mapping saved during import. This avoids fragile full-tree re-scans and
-    // path matching when the app is reopened, so playback/rename works without
-    // asking the user to re-import the library.
+    // mapping saved during import. If storedUri is present, files are already
+    // copied into TempoKey's private Android storage and remain playable even
+    // if the external folder permission is later unavailable.
     if (meta.fileMetas && meta.fileMetas.length > 0) {
       const entries = meta.fileMetas.map(({ trackId, meta: fileMeta }) => ({
         trackId,
         file: safFileFromMeta(fileMeta),
       }));
+      const hasPrivateCopies = meta.fileMetas.every(
+        ({ meta: fileMeta }) => !!fileMeta.storedUri,
+      );
+      const finalEntries = hasPrivateCopies
+        ? entries
+        : await persistAndroidImportedFiles(libId, entries);
+      if (!hasPrivateCopies) {
+        await persistAndroidLibrary(libId, meta.treeUri, meta.name, finalEntries);
+      }
       setActiveTreeUri(meta.treeUri, meta.name);
       return {
         name: meta.name,
         treeUri: meta.treeUri,
-        files: entries.map((e) => e.file),
-        entries,
+        files: finalEntries.map((e) => e.file),
+        entries: finalEntries,
       };
     }
+
+    const { granted } = await FolderPicker.hasPersistedAccess({
+      treeUri: meta.treeUri,
+    });
+    if (!granted) return null;
 
     const { rootName, files: metas } = await FolderPicker.listAudioFiles({
       treeUri: meta.treeUri,

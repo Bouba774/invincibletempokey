@@ -136,10 +136,12 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import org.json.JSONObject;
 
 @CapacitorPlugin(
     name = "FolderPicker",
@@ -229,9 +231,15 @@ public class FolderPickerPlugin extends Plugin {
 
     @PluginMethod
     public void pickFolder(PluginCall call) {
+        String alias = permissionAlias();
+        if (!"unsupported".equals(alias) && getPermissionState(alias) != PermissionState.GRANTED) {
+            call.reject("AUDIO_PERMISSION_REQUIRED");
+            return;
+        }
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION
+            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
         );
         startActivityForResult(call, intent, "handlePickResult");
@@ -248,11 +256,27 @@ public class FolderPickerPlugin extends Plugin {
             call.reject("NO_URI");
             return;
         }
-        int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                  | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION;
+        int grantedFlags = result.getData().getFlags();
+        int takeFlags = grantedFlags & (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        );
+        if ((takeFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) == 0) {
+            takeFlags |= Intent.FLAG_GRANT_READ_URI_PERMISSION;
+        }
         try {
-            getContext().getContentResolver().takePersistableUriPermission(treeUri, flags);
-        } catch (Exception ignored) {}
+            getContext().getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
+        } catch (Exception first) {
+            try {
+                getContext().getContentResolver().takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                );
+            } catch (Exception second) {
+                call.reject("PERSIST_PERMISSION_FAIL", second);
+                return;
+            }
+        }
 
         String name = "";
         try {
@@ -365,8 +389,7 @@ public class FolderPickerPlugin extends Plugin {
         InputStream is = null;
         try {
             Uri uri = Uri.parse(uriStr);
-            is = getContext().getContentResolver().openInputStream(uri);
-            if (is == null) { call.reject("OPEN_FAIL"); return; }
+            is = openUriInputStream(uri);
             long skipped = 0;
             while (skipped < offset) {
                 long s = is.skip(offset - skipped);
@@ -396,6 +419,97 @@ public class FolderPickerPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void persistAudioFiles(PluginCall call) {
+        String libraryId = call.getString("libraryId", "library");
+        JSArray input = call.getArray("files");
+        if (input == null) { call.reject("MISSING_FILES"); return; }
+
+        File dir = new File(getContext().getFilesDir(), "tempokey-audio/" + sanitizeName(libraryId));
+        if (!dir.exists() && !dir.mkdirs()) {
+            call.reject("STORE_DIR_FAIL");
+            return;
+        }
+
+        JSArray entries = new JSArray();
+        try {
+            for (int i = 0; i < input.length(); i++) {
+                JSONObject item = input.getJSONObject(i);
+                String trackId = item.optString("trackId", "");
+                JSONObject meta = item.optJSONObject("meta");
+                if (trackId.isEmpty() || meta == null) continue;
+
+                String uriStr = meta.optString("uri", "");
+                String name = meta.optString("name", "audio");
+                String relativePath = meta.optString("relativePath", name);
+                String mime = meta.optString("mime", "");
+                long size = meta.optLong("size", 0L);
+                if (uriStr.isEmpty()) continue;
+
+                String ext = extensionFromName(name);
+                if (ext.isEmpty()) ext = extensionFromMime(mime);
+                if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
+                    mime = mimeFromExtension(ext);
+                }
+                String safeName = sanitizeName(name);
+                if (safeName.isEmpty()) safeName = "audio";
+                String safe = sha1(trackId + uriStr) + "-" + safeName;
+                if (!ext.isEmpty() && !safe.toLowerCase().endsWith("." + ext)) safe = safe + "." + ext;
+                File out = new File(dir, safe);
+
+                copyUriToFile(Uri.parse(uriStr), out, size);
+
+                JSObject nextMeta = new JSObject();
+                nextMeta.put("uri", uriStr);
+                nextMeta.put("storedUri", Uri.fromFile(out).toString());
+                nextMeta.put("name", name);
+                nextMeta.put("relativePath", relativePath);
+                nextMeta.put("size", out.length() > 0L ? out.length() : size);
+                nextMeta.put("mime", mime == null ? "" : mime);
+
+                JSObject entry = new JSObject();
+                entry.put("trackId", trackId);
+                entry.put("meta", nextMeta);
+                entries.put(entry);
+            }
+
+            JSObject ret = new JSObject();
+            ret.put("entries", entries);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("PERSIST_AUDIO_FAIL", e);
+        }
+    }
+
+    private void copyUriToFile(Uri src, File out, long expectedSize) throws Exception {
+        if (out.exists() && out.length() > 0L && (expectedSize <= 0L || out.length() == expectedSize)) return;
+        InputStream is = null;
+        FileOutputStream os = null;
+        try {
+            is = openUriInputStream(src);
+            os = new FileOutputStream(out, false);
+            byte[] chunk = new byte[256 * 1024];
+            int n;
+            while ((n = is.read(chunk)) > 0) os.write(chunk, 0, n);
+            os.flush();
+        } finally {
+            if (os != null) try { os.close(); } catch (Exception ignored) {}
+            if (is != null) try { is.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private InputStream openUriInputStream(Uri uri) throws Exception {
+        if (uri == null) throw new Exception("MISSING_URI");
+        if ("file".equals(uri.getScheme())) {
+            String path = uri.getPath();
+            if (path == null || path.isEmpty()) throw new Exception("OPEN_FAIL");
+            return new FileInputStream(new File(path));
+        }
+        InputStream is = getContext().getContentResolver().openInputStream(uri);
+        if (is == null) throw new Exception("OPEN_FAIL");
+        return is;
+    }
+
+    @PluginMethod
     public void getPlayableUri(PluginCall call) {
         String uriStr = call.getString("uri");
         String name = call.getString("name", "audio");
@@ -406,13 +520,19 @@ public class FolderPickerPlugin extends Plugin {
         FileOutputStream os = null;
         try {
             Uri uri = Uri.parse(uriStr);
-            is = getContext().getContentResolver().openInputStream(uri);
-            if (is == null) { call.reject("OPEN_FAIL"); return; }
             String ext = extensionFromName(name);
             if (ext.isEmpty()) ext = extensionFromMime(mime);
             if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
                 mime = mimeFromExtension(ext);
             }
+            if ("file".equals(uri.getScheme())) {
+                JSObject ret = new JSObject();
+                ret.put("uri", uri.toString());
+                ret.put("mime", mime == null ? "" : mime);
+                call.resolve(ret);
+                return;
+            }
+            is = openUriInputStream(uri);
             String hash = sha1(uriStr);
             String safe = sanitizeName(name);
             if (safe.isEmpty()) safe = "audio";
@@ -516,6 +636,29 @@ public class FolderPickerPlugin extends Plugin {
         }
         try {
             Uri oldUri = Uri.parse(uriStr);
+            if ("file".equals(oldUri.getScheme())) {
+                String path = oldUri.getPath();
+                if (path == null || path.isEmpty()) {
+                    call.reject("RENAME_FAILED");
+                    return;
+                }
+                File oldFile = new File(path);
+                File parent = oldFile.getParentFile();
+                if (parent == null) {
+                    call.reject("RENAME_FAILED");
+                    return;
+                }
+                File newFile = new File(parent, sanitizeName(newName));
+                if (!oldFile.renameTo(newFile)) {
+                    call.reject("RENAME_FAILED");
+                    return;
+                }
+                JSObject ret = new JSObject();
+                ret.put("uri", Uri.fromFile(newFile).toString());
+                ret.put("name", newName);
+                call.resolve(ret);
+                return;
+            }
             Uri newUri = DocumentsContract.renameDocument(
                 getContext().getContentResolver(), oldUri, newName
             );

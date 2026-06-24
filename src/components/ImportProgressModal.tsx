@@ -6,6 +6,7 @@ export function ImportProgressModal({ progress }: { progress: ImportProgress | n
   const labels: Record<ImportProgress["phase"], string> = {
     scan: "Scan des fichiers…",
     build: "Construction de la bibliothèque…",
+    store: "Stockage Android sécurisé…",
     done: "Import terminé",
   };
   const pct =
