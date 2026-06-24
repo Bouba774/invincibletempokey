@@ -3,6 +3,7 @@ import { analyzeFile, formatDuration } from "./audio/analyzer";
 import { useLibraryStore, type Track } from "./library-store";
 import { invalidateHarmonicCache } from "./harmonic";
 import { invalidateSetCache } from "./setbuilder";
+import { analysisNotification } from "./native/analysis-notification";
 
 const CONCURRENCY = 2;
 const MAX_LOG = 200;
@@ -145,6 +146,8 @@ async function runQueue(
         setState({ currentIds: cur });
         invalidateHarmonicCache();
         invalidateSetCache();
+        const st = getState();
+        void analysisNotification.update(st.done, st.total, track.title);
       }
     }
   };
@@ -189,9 +192,21 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       scope: "pending",
       scopeIds: new Set(),
     });
+    await analysisNotification.start(queue.length);
     await runQueue(queue, (p) => set(p), get, false);
     await useLibraryStore.getState().flush();
+    const finalState = get();
     set({ running: false, currentIds: new Set() });
+    if (finalState.abort) {
+      await analysisNotification.cancel();
+    } else if (finalState.errors > 0) {
+      await analysisNotification.finish(
+        false,
+        `${finalState.errors} erreur(s) sur ${finalState.total} morceaux`,
+      );
+    } else {
+      await analysisNotification.finish(true, "Bibliothèque prête");
+    }
   },
 
   reanalyzeIds: async (ids: string[]) => {
@@ -219,9 +234,21 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       scope: "ids",
       scopeIds: idSet,
     });
+    await analysisNotification.start(queue.length, "Réanalyse en cours");
     await runQueue(queue, (p) => set(p), get, true);
     await useLibraryStore.getState().flush();
+    const finalState = get();
     set({ running: false, currentIds: new Set() });
+    if (finalState.abort) {
+      await analysisNotification.cancel();
+    } else if (finalState.errors > 0) {
+      await analysisNotification.finish(
+        false,
+        `${finalState.errors} erreur(s) sur ${finalState.total} morceaux`,
+      );
+    } else {
+      await analysisNotification.finish(true, "Réanalyse terminée");
+    }
   },
 
   reanalyzeAll: async () => {
