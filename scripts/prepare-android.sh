@@ -689,6 +689,33 @@ public class FolderPickerPlugin extends Plugin {
             call.reject("RENAME_ERROR", e);
         }
     }
+
+    @PluginMethod
+    public void deleteDocument(PluginCall call) {
+        String uriStr = call.getString("uri");
+        if (uriStr == null) { call.reject("MISSING_ARGS"); return; }
+        try {
+            Uri target = Uri.parse(uriStr);
+            boolean ok = false;
+            if ("file".equals(target.getScheme())) {
+                String path = target.getPath();
+                if (path != null) {
+                    File f = new File(path);
+                    ok = !f.exists() || f.delete();
+                }
+            } else {
+                ok = DocumentsContract.deleteDocument(
+                    getContext().getContentResolver(), target
+                );
+            }
+            if (!ok) { call.reject("DELETE_FAILED"); return; }
+            JSObject ret = new JSObject();
+            ret.put("deleted", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("DELETE_ERROR", e);
+        }
+    }
 }
 JAVA
 
