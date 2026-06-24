@@ -109,7 +109,7 @@ function getExt(name: string): string {
 }
 
 export interface ImportProgress {
-  phase: "scan" | "build" | "done";
+  phase: "scan" | "build" | "store" | "done";
   scanned: number;
   total: number;
 }
