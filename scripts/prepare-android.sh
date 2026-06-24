@@ -450,8 +450,9 @@ public class FolderPickerPlugin extends Plugin {
                 if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
                     mime = mimeFromExtension(ext);
                 }
-                String safe = sanitizeName(trackId + "-" + name);
-                if (safe.isEmpty()) safe = sha1(trackId + uriStr);
+                String safeName = sanitizeName(name);
+                if (safeName.isEmpty()) safeName = "audio";
+                String safe = sha1(trackId + uriStr) + "-" + safeName;
                 if (!ext.isEmpty() && !safe.toLowerCase().endsWith("." + ext)) safe = safe + "." + ext;
                 File out = new File(dir, safe);
 
