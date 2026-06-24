@@ -1,8 +1,23 @@
 import { useMemo, useState } from "react";
-import { Copy, Trash2, EyeOff, ShieldCheck, CheckCircle2 } from "lucide-react";
+import {
+  Copy,
+  Trash2,
+  EyeOff,
+  ShieldCheck,
+  CheckCircle2,
+  Smartphone,
+  HardDrive,
+  Layers,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useLibraryStore, type Track } from "@/lib/library-store";
 import { findDuplicates, type DuplicateGroup } from "@/lib/duplicates";
+import {
+  deleteAndroidTrackFile,
+  isCapacitorAndroid,
+} from "@/lib/native/folder-picker";
+
+type DeleteScope = "app" | "disk" | "both";
 
 function fmtSize(n: number | null): string {
   if (!n) return "—";
@@ -13,8 +28,10 @@ function fmtSize(n: number | null): string {
 export function DuplicatesPanel() {
   const library = useLibraryStore((s) => s.library);
   const removeTracks = useLibraryStore((s) => s.removeTracks);
+  const getFile = useLibraryStore((s) => s.getFile);
   const [ignored, setIgnored] = useState<Set<string>>(new Set());
   const [keepers, setKeepers] = useState<Map<string, string>>(new Map());
+  const [scope, setScope] = useState<DeleteScope>("app");
 
   const groups = useMemo<DuplicateGroup[]>(() => {
     if (!library) return [];
@@ -36,19 +53,75 @@ export function DuplicatesPanel() {
     return sorted[0].id;
   }
 
-  async function applyGroup(g: DuplicateGroup) {
+  async function deleteFromDisk(ids: string[]): Promise<{ ok: number; fail: number }> {
+    let ok = 0;
+    let fail = 0;
+    for (const id of ids) {
+      const f = getFile(id);
+      try {
+        if (isCapacitorAndroid()) {
+          const r = await deleteAndroidTrackFile(f);
+          r ? ok++ : fail++;
+        } else {
+          // Web: FileSystemFileHandle.remove() where supported.
+          type Removable = FileSystemFileHandle & { remove?: () => Promise<void> };
+          const handle =
+            (f as unknown as { handle?: Removable } | undefined)?.handle;
+          if (handle?.remove) {
+            await handle.remove();
+            ok++;
+          } else {
+            fail++;
+          }
+        }
+      } catch {
+        fail++;
+      }
+    }
+    return { ok, fail };
+  }
+
+  async function applyGroup(g: DuplicateGroup): Promise<{ disk: { ok: number; fail: number } }> {
     const keepId = pickDefault(g);
     const toRemove = g.tracks.filter((t) => t.id !== keepId).map((t) => t.id);
-    if (toRemove.length === 0) return;
-    await removeTracks(toRemove);
+    if (toRemove.length === 0) return { disk: { ok: 0, fail: 0 } };
+    let disk = { ok: 0, fail: 0 };
+    if (scope === "disk" || scope === "both") {
+      disk = await deleteFromDisk(toRemove);
+    }
+    if (scope === "app" || scope === "both") {
+      await removeTracks(toRemove);
+    } else if (scope === "disk" && disk.ok > 0) {
+      // When the user chose disk-only but some files were deleted, drop the
+      // now-orphan entries from the library to keep it consistent.
+      await removeTracks(toRemove);
+    }
     setIgnored((prev) => new Set(prev).add(g.id));
+    return { disk };
   }
 
   async function applyAll() {
     const removed = visible.reduce((n, g) => n + (g.tracks.length - 1), 0);
-    for (const g of visible) await applyGroup(g);
+    let diskOk = 0;
+    let diskFail = 0;
+    for (const g of visible) {
+      const r = await applyGroup(g);
+      diskOk += r.disk.ok;
+      diskFail += r.disk.fail;
+    }
     if (removed > 0) {
-      toast.success(`${removed} doublon${removed > 1 ? "s" : ""} retiré${removed > 1 ? "s" : ""}`);
+      const where =
+        scope === "app"
+          ? "de la bibliothèque"
+          : scope === "disk"
+            ? "de l'appareil"
+            : "de la bibliothèque et de l'appareil";
+      toast.success(
+        `${removed} doublon${removed > 1 ? "s" : ""} retiré${removed > 1 ? "s" : ""} ${where}`,
+      );
+      if (diskFail > 0) {
+        toast.error(`${diskFail} fichier${diskFail > 1 ? "s" : ""} n'a pas pu être supprimé du disque`);
+      }
     }
   }
 
@@ -63,18 +136,22 @@ export function DuplicatesPanel() {
       </div>
 
       {visible.length > 0 && (
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            Conserve un fichier par groupe, retire les autres de la bibliothèque (le fichier sur le
-            disque n'est pas supprimé).
-          </p>
-          <button
-            onClick={() => void applyAll()}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[var(--primary-foreground)]"
-            style={{ background: "var(--gradient-primary)" }}
-          >
-            <ShieldCheck className="h-3.5 w-3.5" /> Nettoyer tout
-          </button>
+        <div className="space-y-2">
+          <ScopeSelector scope={scope} onChange={setScope} />
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {scope === "app" && "Retire les doublons de la bibliothèque (fichiers conservés sur l'appareil)."}
+              {scope === "disk" && "Supprime les fichiers doublons de l'appareil (la bibliothèque est aussi nettoyée)."}
+              {scope === "both" && "Retire de la bibliothèque ET supprime définitivement les fichiers de l'appareil."}
+            </p>
+            <button
+              onClick={() => void applyAll()}
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[var(--primary-foreground)]"
+              style={{ background: "var(--gradient-primary)" }}
+            >
+              <ShieldCheck className="h-3.5 w-3.5" /> Nettoyer tout
+            </button>
+          </div>
         </div>
       )}
 
@@ -111,6 +188,42 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 text-xl font-semibold tabular-nums">{value.toLocaleString()}</div>
+    </div>
+  );
+}
+
+function ScopeSelector({
+  scope,
+  onChange,
+}: {
+  scope: DeleteScope;
+  onChange: (s: DeleteScope) => void;
+}) {
+  const opts: { id: DeleteScope; label: string; Icon: typeof Smartphone }[] = [
+    { id: "app", label: "Application", Icon: Smartphone },
+    { id: "disk", label: "Appareil", Icon: HardDrive },
+    { id: "both", label: "Les deux", Icon: Layers },
+  ];
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-border bg-card/60 p-1">
+      {opts.map(({ id, label, Icon }) => {
+        const active = scope === id;
+        return (
+          <button
+            key={id}
+            onClick={() => onChange(id)}
+            className={`flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              active
+                ? "text-[var(--primary-foreground)]"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            style={active ? { background: "var(--gradient-primary)" } : undefined}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }

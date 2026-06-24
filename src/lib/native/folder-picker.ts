@@ -39,6 +39,7 @@ export interface FolderPickerPlugin {
     uri: string;
     name: string;
   }>;
+  deleteDocument(opts: { uri: string }): Promise<{ deleted: boolean }>;
 }
 
 export const FolderPicker = registerPlugin<FolderPickerPlugin>("FolderPicker");
@@ -265,6 +266,39 @@ export function getSafUri(file: File | undefined | null): string | null {
   if (!file) return null;
   const v = (file as unknown as { __safUri?: unknown }).__safUri;
   return typeof v === "string" ? v : null;
+}
+
+/**
+ * Best-effort delete of the underlying file(s) of a SAF-backed track on
+ * Android. Tries the original on-disk file (SAF content URI) first, then the
+ * cached private copy. Returns true if at least one of them was deleted.
+ * No-op on web — file deletion there is handled via the FS Access API in
+ * the caller.
+ */
+export async function deleteAndroidTrackFile(
+  file: File | undefined | null,
+): Promise<boolean> {
+  if (!isCapacitorAndroid() || !file) return false;
+  const meta = getSafMeta(file);
+  const safUri = meta?.uri || getSafUri(file);
+  const storedUri = meta?.storedUri;
+  let ok = false;
+  if (safUri) {
+    try {
+      const r = await FolderPicker.deleteDocument({ uri: safUri });
+      ok = ok || !!r?.deleted;
+    } catch {
+      /* ignore — SAF permission may have been revoked */
+    }
+  }
+  if (storedUri) {
+    try {
+      await FolderPicker.deleteDocument({ uri: storedUri });
+    } catch {
+      /* private copy may already be gone */
+    }
+  }
+  return ok;
 }
 
 export async function getSafPlayableUrl(
