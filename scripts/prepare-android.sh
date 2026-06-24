@@ -756,6 +756,363 @@ NODE
 fi
 
 # ──────────────────────────────────────────────────────────────────────────
+# Install the AnalysisNotification plugin + foreground service.
+# Keeps a persistent native notification visible (with live progress) and
+# acquires a partial WakeLock so the WebView's analysis JS keeps running
+# while the app is in background / screen locked.
+# ──────────────────────────────────────────────────────────────────────────
+ANALYSIS_PKG_DIR="android/app/src/main/java/app/lovable/tempokey/analysis"
+if [ -d "android/app" ]; then
+  echo "▶ Installing native AnalysisNotification plugin…"
+  mkdir -p "$ANALYSIS_PKG_DIR"
+  cat > "$ANALYSIS_PKG_DIR/AnalysisForegroundService.java" <<'JAVA'
+package app.lovable.tempokey.analysis;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.PowerManager;
+import androidx.core.app.NotificationCompat;
+
+public class AnalysisForegroundService extends Service {
+    public static final String CHANNEL_ID = "tempokey_analysis";
+    public static final int NOTIF_ID = 4242;
+    public static final String ACTION_START = "tempokey.analysis.START";
+    public static final String ACTION_UPDATE = "tempokey.analysis.UPDATE";
+    public static final String ACTION_FINISH = "tempokey.analysis.FINISH";
+    public static final String ACTION_CANCEL = "tempokey.analysis.CANCEL";
+
+    private PowerManager.WakeLock wakeLock;
+    private int total = 0;
+    private int done = 0;
+    private String currentTitle = "";
+    private boolean running = false;
+
+    public static int currentDone = 0;
+    public static int currentTotal = 0;
+    public static boolean currentRunning = false;
+
+    @Override
+    public IBinder onBind(Intent intent) { return null; }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        createChannel();
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) return START_STICKY;
+        String action = intent.getAction();
+        if (ACTION_START.equals(action)) {
+            total = intent.getIntExtra("total", 0);
+            done = 0;
+            currentTitle = intent.getStringExtra("title");
+            if (currentTitle == null) currentTitle = "Analyse en cours";
+            running = true;
+            currentRunning = true;
+            currentTotal = total;
+            currentDone = 0;
+            startForegroundCompat(buildProgressNotification());
+            acquireWake();
+        } else if (ACTION_UPDATE.equals(action)) {
+            done = intent.getIntExtra("done", done);
+            total = intent.getIntExtra("total", total);
+            String t = intent.getStringExtra("currentTitle");
+            if (t != null) currentTitle = t;
+            currentDone = done;
+            currentTotal = total;
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(NOTIF_ID, buildProgressNotification());
+        } else if (ACTION_FINISH.equals(action)) {
+            boolean ok = intent.getBooleanExtra("ok", true);
+            String msg = intent.getStringExtra("message");
+            if (msg == null) msg = ok ? "Bibliothèque prête" : "Analyse interrompue";
+            running = false;
+            currentRunning = false;
+            releaseWake();
+            try { stopForeground(STOP_FOREGROUND_DETACH); } catch (Throwable ignored) {
+                stopForeground(false);
+            }
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(NOTIF_ID, buildFinalNotification(ok, msg));
+            stopSelf();
+        } else if (ACTION_CANCEL.equals(action)) {
+            running = false;
+            currentRunning = false;
+            releaseWake();
+            try { stopForeground(STOP_FOREGROUND_REMOVE); } catch (Throwable ignored) {
+                stopForeground(true);
+            }
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(NOTIF_ID);
+            stopSelf();
+        }
+        return START_STICKY;
+    }
+
+    @Override
+    public void onDestroy() {
+        releaseWake();
+        super.onDestroy();
+    }
+
+    private void createChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel ch = new NotificationChannel(
+                CHANNEL_ID, "Analyse audio", NotificationManager.IMPORTANCE_LOW
+            );
+            ch.setDescription("Analyse de la bibliothèque en arrière-plan");
+            ch.setShowBadge(false);
+            ch.setSound(null, null);
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.createNotificationChannel(ch);
+        }
+    }
+
+    private PendingIntent contentIntent() {
+        Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (launch == null) launch = new Intent();
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        return PendingIntent.getActivity(this, 0, launch, flags);
+    }
+
+    private int smallIcon() {
+        int id = getResources().getIdentifier("ic_stat_icon", "drawable", getPackageName());
+        if (id != 0) return id;
+        id = getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName());
+        if (id != 0) return id;
+        return android.R.drawable.stat_sys_download;
+    }
+
+    private Notification buildProgressNotification() {
+        int pct = total > 0 ? (int) Math.floor((done * 100.0) / total) : 0;
+        String text = "Analyse en cours · " + done + " / " + total + " (" + pct + " %)";
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(smallIcon())
+            .setContentTitle("TempoKey")
+            .setContentText(text)
+            .setSubText(currentTitle)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setProgress(total > 0 ? total : 100, done, total <= 0)
+            .setContentIntent(contentIntent());
+        return b.build();
+    }
+
+    private Notification buildFinalNotification(boolean ok, String msg) {
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(smallIcon())
+            .setContentTitle(ok ? "TempoKey · Analyse terminée" : "TempoKey · Erreur d'analyse")
+            .setContentText(msg)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(contentIntent());
+        return b.build();
+    }
+
+    private void startForegroundCompat(Notification n) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                return;
+            } catch (Throwable ignored) {}
+        }
+        startForeground(NOTIF_ID, n);
+    }
+
+    private void acquireWake() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) return;
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return;
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TempoKey:Analysis");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire(60 * 60 * 1000L);
+        } catch (Throwable ignored) {}
+    }
+
+    private void releaseWake() {
+        try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); }
+        catch (Throwable ignored) {}
+        wakeLock = null;
+    }
+}
+JAVA
+
+  cat > "$ANALYSIS_PKG_DIR/AnalysisNotificationPlugin.java" <<'JAVA'
+package app.lovable.tempokey.analysis;
+
+import android.Manifest;
+import android.content.Intent;
+import android.os.Build;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+
+@CapacitorPlugin(
+    name = "AnalysisNotification",
+    permissions = {
+        @Permission(alias = "notif", strings = { Manifest.permission.POST_NOTIFICATIONS })
+    }
+)
+public class AnalysisNotificationPlugin extends Plugin {
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 33) {
+            JSObject ret = new JSObject();
+            ret.put("granted", true);
+            call.resolve(ret);
+            return;
+        }
+        if (getPermissionState("notif") == PermissionState.GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("granted", true);
+            call.resolve(ret);
+            return;
+        }
+        requestPermissionForAlias("notif", call, "notifPermCallback");
+    }
+
+    @PermissionCallback
+    private void notifPermCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", getPermissionState("notif") == PermissionState.GRANTED);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void start(PluginCall call) {
+        int total = call.getInt("total", 0);
+        String title = call.getString("title", "Analyse en cours");
+        Intent i = new Intent(getContext(), AnalysisForegroundService.class);
+        i.setAction(AnalysisForegroundService.ACTION_START);
+        i.putExtra("total", total);
+        i.putExtra("title", title);
+        startService(i);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void update(PluginCall call) {
+        Intent i = new Intent(getContext(), AnalysisForegroundService.class);
+        i.setAction(AnalysisForegroundService.ACTION_UPDATE);
+        i.putExtra("done", call.getInt("done", 0));
+        i.putExtra("total", call.getInt("total", 0));
+        i.putExtra("currentTitle", call.getString("currentTitle", ""));
+        startService(i);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void finish(PluginCall call) {
+        Intent i = new Intent(getContext(), AnalysisForegroundService.class);
+        i.setAction(AnalysisForegroundService.ACTION_FINISH);
+        i.putExtra("ok", call.getBoolean("ok", true));
+        i.putExtra("message", call.getString("message", ""));
+        startService(i);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void cancel(PluginCall call) {
+        Intent i = new Intent(getContext(), AnalysisForegroundService.class);
+        i.setAction(AnalysisForegroundService.ACTION_CANCEL);
+        startService(i);
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getCurrentState(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("running", AnalysisForegroundService.currentRunning);
+        ret.put("done", AnalysisForegroundService.currentDone);
+        ret.put("total", AnalysisForegroundService.currentTotal);
+        call.resolve(ret);
+    }
+
+    private void startService(Intent i) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getContext().startForegroundService(i);
+        } else {
+            getContext().startService(i);
+        }
+    }
+}
+JAVA
+
+  echo "▶ Registering AnalysisNotification plugin in MainActivity…"
+  node <<'NODE'
+const fs = require("fs");
+const path = require("path");
+
+function find(dir, name) {
+  if (!fs.existsSync(dir)) return null;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      const r = find(p, name);
+      if (r) return r;
+    } else if (e.name === name) return p;
+  }
+  return null;
+}
+
+const mainActivity = find("android/app/src/main/java", "MainActivity.java");
+if (!mainActivity) process.exit(0);
+let src = fs.readFileSync(mainActivity, "utf8");
+const importLine = 'import app.lovable.tempokey.analysis.AnalysisNotificationPlugin;';
+const registerLine = '        registerPlugin(AnalysisNotificationPlugin.class);';
+let changed = false;
+if (!src.includes(importLine)) {
+  src = src.replace(
+    /(import com\.getcapacitor\.BridgeActivity;)/,
+    `$1\n${importLine}`,
+  );
+  changed = true;
+}
+if (!src.includes("registerPlugin(AnalysisNotificationPlugin.class)")) {
+  src = src.replace(
+    /(\n[ \t]*)(super\.onCreate\([^)]*\);)/,
+    `$1${registerLine.trim()}\n$1$2`,
+  );
+  changed = true;
+}
+if (changed) {
+  fs.writeFileSync(mainActivity, src);
+  console.log("  ✓ MainActivity.java registers AnalysisNotification");
+}
+NODE
+fi
+
+# ──────────────────────────────────────────────────────────────────────────
 # Inject TempoKey's audio-file permissions into AndroidManifest.xml.
 # Capacitor's default manifest only declares INTERNET, which makes Android
 # App Info show "No permissions requested". We add the minimal set required
