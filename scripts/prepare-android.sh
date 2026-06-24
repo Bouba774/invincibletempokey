@@ -636,6 +636,29 @@ public class FolderPickerPlugin extends Plugin {
         }
         try {
             Uri oldUri = Uri.parse(uriStr);
+            if ("file".equals(oldUri.getScheme())) {
+                String path = oldUri.getPath();
+                if (path == null || path.isEmpty()) {
+                    call.reject("RENAME_FAILED");
+                    return;
+                }
+                File oldFile = new File(path);
+                File parent = oldFile.getParentFile();
+                if (parent == null) {
+                    call.reject("RENAME_FAILED");
+                    return;
+                }
+                File newFile = new File(parent, sanitizeName(newName));
+                if (!oldFile.renameTo(newFile)) {
+                    call.reject("RENAME_FAILED");
+                    return;
+                }
+                JSObject ret = new JSObject();
+                ret.put("uri", Uri.fromFile(newFile).toString());
+                ret.put("name", newName);
+                call.resolve(ret);
+                return;
+            }
             Uri newUri = DocumentsContract.renameDocument(
                 getContext().getContentResolver(), oldUri, newName
             );
