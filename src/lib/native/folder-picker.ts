@@ -182,11 +182,15 @@ export function safFileFromMeta(meta: SafFileMeta): File {
 
   let cached: ArrayBuffer | null = null;
 
-  const sourceUri = () => meta.storedUri || meta.uri;
-
   const fullArrayBuffer = async (): Promise<ArrayBuffer> => {
     if (cached) return cached;
-    const { data } = await FolderPicker.readFile({ uri: sourceUri() });
+    let data: string;
+    try {
+      ({ data } = await FolderPicker.readFile({ uri: meta.storedUri || meta.uri }));
+    } catch (err) {
+      if (!meta.storedUri) throw err;
+      ({ data } = await FolderPicker.readFile({ uri: meta.uri }));
+    }
     cached = base64ToArrayBuffer(data);
     return cached;
   };
@@ -197,11 +201,21 @@ export function safFileFromMeta(meta: SafFileMeta): File {
   ): Promise<ArrayBuffer> => {
     const length = Math.max(0, end - start);
     if (length === 0) return new ArrayBuffer(0);
-    const { data } = await FolderPicker.readFile({
-      uri: sourceUri(),
-      offset: start,
-      length,
-    });
+    let data: string;
+    try {
+      ({ data } = await FolderPicker.readFile({
+        uri: meta.storedUri || meta.uri,
+        offset: start,
+        length,
+      }));
+    } catch (err) {
+      if (!meta.storedUri) throw err;
+      ({ data } = await FolderPicker.readFile({
+        uri: meta.uri,
+        offset: start,
+        length,
+      }));
+    }
     return base64ToArrayBuffer(data);
   };
 
@@ -260,12 +274,23 @@ export async function getSafPlayableUrl(
   if (!uri) return null;
   const meta = getSafMeta(file);
   const sourceUri = meta?.storedUri || uri;
-  const res = await FolderPicker.getPlayableUri({
-    uri: sourceUri,
-    name: file.name || meta?.name,
-    mime: file.type || meta?.mime,
-    size: file.size || meta?.size,
-  });
+  let res: { uri: string; mime: string };
+  try {
+    res = await FolderPicker.getPlayableUri({
+      uri: sourceUri,
+      name: file.name || meta?.name,
+      mime: file.type || meta?.mime,
+      size: file.size || meta?.size,
+    });
+  } catch (err) {
+    if (!meta?.storedUri) throw err;
+    res = await FolderPicker.getPlayableUri({
+      uri,
+      name: file.name || meta.name,
+      mime: file.type || meta.mime,
+      size: file.size || meta.size,
+    });
+  }
   return {
     url: Capacitor.convertFileSrc?.(res.uri) ?? res.uri,
     mime: res.mime || file.type || meta?.mime || "",
