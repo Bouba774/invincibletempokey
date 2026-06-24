@@ -775,6 +775,10 @@ let xml = fs.readFileSync(path, "utf8");
 const perms = [
   '<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />',
   '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
+  '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+  '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />',
+  '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
+  '<uses-permission android:name="android.permission.WAKE_LOCK" />',
 ];
 
 let changed = false;
@@ -800,6 +804,16 @@ xml = xml.replace(/<activity\b([^>]*)>/, (match, attrs) => {
   ensureAttr("android:hardwareAccelerated", "true");
   return `<activity${next}>`;
 });
+
+// Declare the AnalysisForegroundService inside <application>.
+const serviceDecl =
+  '<service\n' +
+  '            android:name="app.lovable.tempokey.analysis.AnalysisForegroundService"\n' +
+  '            android:exported="false"\n' +
+  '            android:foregroundServiceType="dataSync" />';
+if (!xml.includes('app.lovable.tempokey.analysis.AnalysisForegroundService')) {
+  xml = xml.replace(/<\/application>/, `        ${serviceDecl}\n    </application>`);
+}
 
 if (changed || xml !== fs.readFileSync(path, "utf8")) {
   fs.writeFileSync(path, xml);
