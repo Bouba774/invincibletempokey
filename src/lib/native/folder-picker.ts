@@ -380,12 +380,21 @@ export async function restoreAndroidFiles(
         trackId,
         file: safFileFromMeta(fileMeta),
       }));
+      const hasPrivateCopies = meta.fileMetas.every(
+        ({ meta: fileMeta }) => !!fileMeta.storedUri,
+      );
+      const finalEntries = hasPrivateCopies
+        ? entries
+        : await persistAndroidImportedFiles(libId, entries);
+      if (!hasPrivateCopies) {
+        await persistAndroidLibrary(libId, meta.treeUri, meta.name, finalEntries);
+      }
       setActiveTreeUri(meta.treeUri, meta.name);
       return {
         name: meta.name,
         treeUri: meta.treeUri,
-        files: entries.map((e) => e.file),
-        entries,
+        files: finalEntries.map((e) => e.file),
+        entries: finalEntries,
       };
     }
 
