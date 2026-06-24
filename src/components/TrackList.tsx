@@ -240,7 +240,7 @@ function SortableTrackRow(props: {
         isDragging={isDragging}
         dragHandleProps={
           props.reorderMode
-            ? { ...(attributes as Record<string, unknown>), ...(listeners as Record<string, unknown>) }
+            ? { ...(attributes as unknown as Record<string, unknown>), ...((listeners ?? {}) as unknown as Record<string, unknown>) }
             : undefined
         }
       />
