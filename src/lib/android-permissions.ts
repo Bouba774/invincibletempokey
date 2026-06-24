@@ -33,10 +33,10 @@ export async function isNativeAndroid(): Promise<boolean> {
 }
 
 /**
- * Request the Android audio-file access permission. Returns "granted" when
- * the user accepts (or when no runtime grant is needed, e.g. SAF picker),
- * "denied" when the user declines once, and "blocked" when Android marks
- * the permission as never-ask-again.
+ * Request the Android audio-file access permission exactly when the user
+ * starts the first library import. Returns "granted" when the user accepts,
+ * "denied" when the user declines once, and "blocked" when Android marks the
+ * permission as never-ask-again.
  */
 export async function requestAudioPermission(): Promise<AudioPermissionStatus> {
   if (!(await isNativeAndroid())) return "granted";
