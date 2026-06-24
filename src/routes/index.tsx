@@ -10,7 +10,6 @@ import { useAnalysisStore } from "@/lib/analysis-store";
 import { ImportProgressModal } from "@/components/ImportProgressModal";
 import {
   FolderPlus,
-  Clock,
   Activity,
   Music2,
   Compass,
@@ -26,7 +25,6 @@ import {
   Database,
   Headphones,
   ArrowRight,
-  Sparkles,
 } from "lucide-react";
 import logoUrl from "@/assets/tempokey-logo.png";
 import {
