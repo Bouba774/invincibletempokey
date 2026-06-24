@@ -68,16 +68,33 @@ async function applyRenameAndroid(
     }
     try {
       const meta = (file as unknown as { __safMeta?: SafFileMeta }).__safMeta;
-      const { uri: newUri } = await FolderPicker.renameDocument({
-        uri: meta?.storedUri || uri,
+      // Rename the REAL file on the user's storage first (SAF content URI).
+      // This is what other apps (file managers, DJ apps, music players) see.
+      const safUriToRename = meta?.uri || uri;
+      const { uri: newSafUri } = await FolderPicker.renameDocument({
+        uri: safUriToRename,
         newName: item.newName,
       });
+      // Best-effort: also rename the private cached copy so the on-device
+      // mirror stays consistent. A failure here doesn't undo the SAF rename.
+      let newStoredUri = meta?.storedUri;
+      if (meta?.storedUri) {
+        try {
+          const r = await FolderPicker.renameDocument({
+            uri: meta.storedUri,
+            newName: item.newName,
+          });
+          newStoredUri = r.uri;
+        } catch {
+          /* keep old storedUri; private cache will be refreshed on next import */
+        }
+      }
       // Refresh in-memory File handle so subsequent ops (incl. undo) work.
       if (meta) {
         const updated: SafFileMeta = {
           ...meta,
-          uri: meta.storedUri ? meta.uri : newUri,
-          storedUri: meta.storedUri ? newUri : meta.storedUri,
+          uri: newSafUri,
+          storedUri: newStoredUri,
           name: item.newName,
           relativePath: replaceLastSegment(meta.relativePath, item.newName),
         };
