@@ -229,9 +229,15 @@ public class FolderPickerPlugin extends Plugin {
 
     @PluginMethod
     public void pickFolder(PluginCall call) {
+        String alias = permissionAlias();
+        if (!"unsupported".equals(alias) && getPermissionState(alias) != PermissionState.GRANTED) {
+            call.reject("AUDIO_PERMISSION_REQUIRED");
+            return;
+        }
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION
+            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
         );
         startActivityForResult(call, intent, "handlePickResult");
@@ -248,11 +254,27 @@ public class FolderPickerPlugin extends Plugin {
             call.reject("NO_URI");
             return;
         }
-        int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                  | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION;
+        int grantedFlags = result.getData().getFlags();
+        int takeFlags = grantedFlags & (
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        );
+        if ((takeFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) == 0) {
+            takeFlags |= Intent.FLAG_GRANT_READ_URI_PERMISSION;
+        }
         try {
-            getContext().getContentResolver().takePersistableUriPermission(treeUri, flags);
-        } catch (Exception ignored) {}
+            getContext().getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
+        } catch (Exception first) {
+            try {
+                getContext().getContentResolver().takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                );
+            } catch (Exception second) {
+                call.reject("PERSIST_PERMISSION_FAIL", second);
+                return;
+            }
+        }
 
         String name = "";
         try {
