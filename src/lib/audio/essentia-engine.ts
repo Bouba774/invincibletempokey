@@ -48,6 +48,16 @@ interface EssentiaInstance {
     weightType?: string,
     windowType?: string,
   ): { key: string; scale: "major" | "minor"; strength: number };
+  PercivalBpmEstimator(
+    signal: EssentiaVector,
+    frameSize?: number,
+    frameSizeOSS?: number,
+    hopSize?: number,
+    hopSizeOSS?: number,
+    maxBPM?: number,
+    minBPM?: number,
+    sampleRate?: number,
+  ): { bpm: number };
   shutdown?(): void;
 }
 
@@ -57,10 +67,8 @@ let permanentlyFailed = false;
 
 async function loadEssentia(): Promise<EssentiaInstance | null> {
   if (permanentlyFailed) return null;
-  // The WASM bundle is large and inlined as base64; only load in the browser.
   if (typeof window === "undefined") return null;
   try {
-    // Dynamic imports: keep WASM out of the main bundle.
     const [wasmMod, coreMod] = await Promise.all([
       import(/* @vite-ignore */ "essentia.js/dist/essentia-wasm.es.js"),
       import(/* @vite-ignore */ "essentia.js/dist/essentia.js-core.es.js"),
@@ -68,31 +76,46 @@ async function loadEssentia(): Promise<EssentiaInstance | null> {
     const wasm = (wasmMod as { EssentiaWASM: unknown }).EssentiaWASM as {
       onRuntimeInitialized?: () => void;
       calledRun?: boolean;
+      EssentiaJS?: unknown;
     };
     if (!wasm) throw new Error("EssentiaWASM export missing");
-    // Wait for Emscripten runtime to be ready.
-    if (!wasm.calledRun) {
+    // Wait for Emscripten runtime to be ready. The reliable signal that the
+    // module is usable is the presence of `EssentiaJS` on the WASM module.
+    if (!wasm.EssentiaJS && !wasm.calledRun) {
       await new Promise<void>((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error("Essentia WASM init timeout")), 20000);
+        const t = setTimeout(
+          () => reject(new Error("Essentia WASM init timeout")),
+          30000,
+        );
         const prev = wasm.onRuntimeInitialized;
         wasm.onRuntimeInitialized = () => {
           clearTimeout(t);
           try {
             prev?.();
-          } catch {
-            // ignore
-          }
+          } catch { /* ignore */ }
           resolve();
         };
-        // Edge case: if calledRun flipped between the check and our handler.
-        if (wasm.calledRun) {
+        // Edge case: flipped between the check and our handler.
+        if (wasm.EssentiaJS || wasm.calledRun) {
           clearTimeout(t);
           resolve();
         }
+        // Defensive poll – some Emscripten builds don't fire the callback
+        // when the module was already initialised by a previous import.
+        const poll = setInterval(() => {
+          if (wasm.EssentiaJS || wasm.calledRun) {
+            clearInterval(poll);
+            clearTimeout(t);
+            resolve();
+          }
+        }, 100);
       });
     }
     const EssentiaCtor = (coreMod as { default: new (m: unknown) => EssentiaInstance }).default;
-    return new EssentiaCtor(wasm);
+    const inst = new EssentiaCtor(wasm);
+    // eslint-disable-next-line no-console
+    console.info("[essentia] WASM engine ready");
+    return inst;
   } catch (e) {
     permanentlyFailed = true;
     // eslint-disable-next-line no-console

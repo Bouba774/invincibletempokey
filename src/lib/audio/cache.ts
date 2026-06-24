@@ -16,7 +16,7 @@ export interface TrackAnalysis {
 
 // Bump the store name whenever the analysis algorithm changes so that
 // existing libraries are transparently re-analysed with the new engine.
-const store = createStore("tempokey-analysis-v4-essentia", "cache");
+const store = createStore("tempokey-analysis-v5-essentia-xref", "cache");
 
 export async function getCachedAnalysis(fileHash: string): Promise<TrackAnalysis | null> {
   try {
