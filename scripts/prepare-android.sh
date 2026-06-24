@@ -520,12 +520,19 @@ public class FolderPickerPlugin extends Plugin {
         FileOutputStream os = null;
         try {
             Uri uri = Uri.parse(uriStr);
-            is = openUriInputStream(uri);
             String ext = extensionFromName(name);
             if (ext.isEmpty()) ext = extensionFromMime(mime);
             if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
                 mime = mimeFromExtension(ext);
             }
+            if ("file".equals(uri.getScheme())) {
+                JSObject ret = new JSObject();
+                ret.put("uri", uri.toString());
+                ret.put("mime", mime == null ? "" : mime);
+                call.resolve(ret);
+                return;
+            }
+            is = openUriInputStream(uri);
             String hash = sha1(uriStr);
             String safe = sanitizeName(name);
             if (safe.isEmpty()) safe = "audio";
