@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Settings, FolderSync } from "lucide-react";
+import { Settings } from "lucide-react";
 import logoUrl from "@/assets/tempokey-logo.png";
 
 export function WorkspaceHeader() {
@@ -16,13 +16,6 @@ export function WorkspaceHeader() {
           <span className="font-display text-[15px] font-semibold tracking-tight">TempoKey</span>
         </Link>
         <div className="flex-1" />
-        <Link
-          to="/"
-          aria-label="Changer de bibliothèque"
-          className="grid h-10 w-10 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-        >
-          <FolderSync className="h-5 w-5" />
-        </Link>
         <Link
           to="/settings"
           aria-label="Paramètres"
