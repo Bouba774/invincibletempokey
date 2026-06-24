@@ -10,21 +10,21 @@ import { useAnalysisStore } from "@/lib/analysis-store";
 import { ImportProgressModal } from "@/components/ImportProgressModal";
 import {
   FolderPlus,
-  Activity,
-  Music2,
-  Compass,
-  Shuffle,
-  ListOrdered,
-  Layers,
-  Pencil,
-  CopyCheck,
-  Search,
-  ShieldCheck,
-  WifiOff,
-  Cloud,
-  Database,
+  AudioWaveform,
+  KeyRound,
+  Disc3,
+  Waves,
+  ArrowDownUp,
+  Blocks,
+  Wand2,
+  ScanSearch,
+  Telescope,
+  LockKeyhole,
+  PlugZap,
+  CloudOff,
+  HardDrive,
   Headphones,
-  ArrowRight,
+  ArrowUpRight,
 } from "lucide-react";
 import logoUrl from "@/assets/tempokey-logo.png";
 import {
@@ -64,22 +64,22 @@ export const Route = createFileRoute("/")({
 });
 
 const FEATURES = [
-  { icon: Activity, title: "Détection BPM", desc: "Tempo précis pour chaque morceau." },
-  { icon: Music2, title: "Tonalité", desc: "Analyse musicale automatique." },
-  { icon: Compass, title: "Notation Camelot", desc: "Roue harmonique standard DJ." },
-  { icon: Shuffle, title: "Harmonic Mixing", desc: "Suggestions compatibles en un coup d'œil." },
-  { icon: ListOrdered, title: "Auto Mix Order", desc: "Tri intelligent pour enchaîner sans accroc." },
-  { icon: Layers, title: "Set Builder", desc: "Warm-up, Peak, Closing structurés." },
-  { icon: Pencil, title: "Renommage intelligent", desc: "Templates DJ + undo complet." },
-  { icon: CopyCheck, title: "Doublons", desc: "Détection exacte et approximative." },
-  { icon: Search, title: "Recherche avancée", desc: "Filtres BPM, clé, durée, mots-clés." },
+  { icon: AudioWaveform, title: "Détection BPM", desc: "Tempo précis pour chaque morceau." },
+  { icon: KeyRound, title: "Tonalité", desc: "Analyse musicale automatique." },
+  { icon: Disc3, title: "Notation Camelot", desc: "Roue harmonique standard DJ." },
+  { icon: Waves, title: "Harmonic Mixing", desc: "Suggestions compatibles en un coup d'œil." },
+  { icon: ArrowDownUp, title: "Auto Mix Order", desc: "Tri intelligent pour enchaîner sans accroc." },
+  { icon: Blocks, title: "Set Builder", desc: "Warm-up, Peak, Closing structurés." },
+  { icon: Wand2, title: "Renommage intelligent", desc: "Templates DJ + undo complet." },
+  { icon: ScanSearch, title: "Doublons", desc: "Détection exacte et approximative." },
+  { icon: Telescope, title: "Recherche avancée", desc: "Filtres BPM, clé, durée, mots-clés." },
 ];
 
 const BENEFITS = [
-  { icon: ShieldCheck, label: "100% local" },
-  { icon: WifiOff, label: "Aucune connexion" },
-  { icon: Cloud, label: "Zéro cloud" },
-  { icon: Database, label: "Bibliothèques massives" },
+  { icon: LockKeyhole, label: "100% local" },
+  { icon: PlugZap, label: "Aucune connexion" },
+  { icon: CloudOff, label: "Zéro cloud" },
+  { icon: HardDrive, label: "Bibliothèques massives" },
   { icon: Headphones, label: "Pensé pour DJs" },
 ];
 
@@ -277,39 +277,39 @@ function Home() {
       />
 
       {/* HERO */}
-      <section className="relative overflow-hidden px-6 pt-10 pb-8 safe-pt safe-px">
+      <section className="relative overflow-hidden px-5 sm:px-6 pt-10 pb-8 safe-pt safe-px">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -top-24 h-72 opacity-60"
           style={{ background: "var(--gradient-hero, var(--gradient-primary))" }}
         />
-        <div className="relative mx-auto flex max-w-xl flex-col items-center text-center">
-          <div className="mb-5 animate-fade-in">
+        <div className="relative mx-auto flex w-full max-w-xl flex-col items-center text-center">
+          <div className="mb-5 animate-fade-in motion-safe:[animation:float_6s_ease-in-out_infinite]">
             <img
               src={logoUrl}
               alt="TempoKey"
-              className="h-20 w-20 rounded-2xl bg-white object-contain p-2"
+              className="h-[clamp(64px,18vw,88px)] w-[clamp(64px,18vw,88px)] rounded-2xl bg-white object-contain p-2"
               style={{ boxShadow: "var(--shadow-elegant)" }}
             />
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="font-display font-bold tracking-tight text-foreground text-[clamp(1.6rem,7vw,2.5rem)] leading-[1.05]">
             TempoKey
           </h1>
-          <p className="mx-auto mt-3 max-w-[280px] text-[13.5px] font-medium text-foreground/90 leading-snug">
+          <p className="mx-auto mt-3 w-full max-w-[min(92%,320px)] text-[clamp(12.5px,3.6vw,15px)] font-medium text-foreground/90 leading-snug text-balance">
             Analysez, organisez et optimisez votre bibliothèque DJ — localement.
           </p>
-          <p className="mx-auto mt-1.5 max-w-[280px] text-[12px] text-muted-foreground leading-snug">
+          <p className="mx-auto mt-1.5 w-full max-w-[min(92%,320px)] text-[clamp(11px,3.2vw,13px)] text-muted-foreground leading-snug text-balance">
             BPM, tonalités, Camelot, Harmonic Mixing.
           </p>
 
-          <div className="mt-6 w-full max-w-[300px] space-y-3">
+          <div className="mt-6 w-full max-w-[min(100%,340px)] space-y-3">
             <button
               onClick={pickFolder}
-              className="press hover-scale flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-[var(--primary-foreground)] animate-fade-in"
+              className="press shine relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl text-[clamp(13px,3.6vw,15px)] font-semibold text-[var(--primary-foreground)] animate-fade-in"
               style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-glow)" }}
             >
-              <FolderPlus className="h-[18px] w-[18px]" />
-              Importer une bibliothèque audio
+              <FolderPlus className="h-[18px] w-[18px] shrink-0" />
+              <span className="truncate">Importer une bibliothèque audio</span>
             </button>
           </div>
         </div>
@@ -347,7 +347,7 @@ function Home() {
                     {lastMeta!.trackCount.toLocaleString("fr-FR")} morceaux
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
               </div>
             </button>
           ) : (

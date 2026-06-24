@@ -392,6 +392,41 @@ html.dark, html.light {
 @keyframes shimmer-sweep {
   100% { transform: translateX(100%); }
 }
+
+/* Premium float (logos, hero medallions) */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* Premium shine sweep on gradient CTAs */
+@utility shine {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      120deg,
+      transparent 0%,
+      color-mix(in oklab, white 35%, transparent) 50%,
+      transparent 100%
+    );
+    transform: translateX(-120%);
+    animation: shine-sweep 3.6s ease-in-out infinite;
+    mix-blend-mode: overlay;
+  }
+}
+@keyframes shine-sweep {
+  0%   { transform: translateX(-120%); }
+  60%  { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shine::before { animation: none; opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .shimmer::after { animation: none; }
 }
