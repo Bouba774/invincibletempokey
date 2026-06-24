@@ -6,14 +6,33 @@ import {
   Check,
   Loader2,
   AlertTriangle,
-  ArrowUp,
-  ArrowDown,
   GripVertical,
   Play,
   Pause,
   Info,
   Lock,
 } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  DragOverlay,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
+import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
+import { CSS } from "@dnd-kit/utilities";
 import { usePlayerStore } from "@/lib/audio/player-store";
 import { useLibraryStore, type Track } from "@/lib/library-store";
 import { useOrderingStore, useOrderedTracks } from "@/lib/ordering-store";
@@ -44,11 +63,9 @@ function TrackRow({
   onToggle,
   onOpenDetails,
   reorderMode,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp,
-  canMoveDown,
   compareTo,
+  dragHandleProps,
+  isDragging,
 }: {
   track: Track;
   index: number;
@@ -56,11 +73,9 @@ function TrackRow({
   onToggle: () => void;
   onOpenDetails: () => void;
   reorderMode: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
   compareTo: Track | null;
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement> & Record<string, unknown>;
+  isDragging?: boolean;
 }) {
   const isCurrent = usePlayerStore((s) => s.currentId === track.id);
   const isPlaying = usePlayerStore((s) => s.isPlaying && s.currentId === track.id);
@@ -81,7 +96,9 @@ function TrackRow({
   return (
     <div
       className={`group flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left transition-colors ${
-        isCurrent
+        isDragging
+          ? "border-[var(--primary)] bg-[var(--primary)]/15 shadow-lg shadow-[var(--primary)]/20"
+          : isCurrent
           ? "border-[var(--primary)]/60 bg-[var(--primary)]/5"
           : selected
             ? "border-[var(--primary)] bg-[var(--primary)]/10"
@@ -110,6 +127,18 @@ function TrackRow({
           ) : (
             <Play className="h-4 w-4 translate-x-[1px]" />
           )}
+        </button>
+      )}
+      {reorderMode && (
+        <button
+          type="button"
+          aria-label="Glisser pour réorganiser"
+          {...(dragHandleProps ?? {})}
+          onClick={(e) => e.preventDefault()}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[var(--surface-elevated)] text-[var(--primary-glow)] touch-none cursor-grab active:cursor-grabbing"
+          style={{ touchAction: "none" }}
+        >
+          <GripVertical className="h-4 w-4" />
         </button>
       )}
       <button
@@ -184,26 +213,37 @@ function TrackRow({
           <Info className="h-4 w-4" />
         </button>
       )}
-      {reorderMode && (
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            aria-label="Monter"
-            onClick={onMoveUp}
-            disabled={!canMoveUp}
-            className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-elevated)] hover:text-foreground disabled:opacity-30"
-          >
-            <ArrowUp className="h-4 w-4" />
-          </button>
-          <button
-            aria-label="Descendre"
-            onClick={onMoveDown}
-            disabled={!canMoveDown}
-            className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-[var(--surface-elevated)] hover:text-foreground disabled:opacity-30"
-          >
-            <ArrowDown className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+    </div>
+  );
+}
+
+function SortableTrackRow(props: {
+  track: Track;
+  index: number;
+  selected: boolean;
+  onToggle: () => void;
+  onOpenDetails: () => void;
+  reorderMode: boolean;
+  compareTo: Track | null;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: props.track.id, disabled: !props.reorderMode });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.35 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      <TrackRow
+        {...props}
+        isDragging={isDragging}
+        dragHandleProps={
+          props.reorderMode
+            ? { ...(attributes as Record<string, unknown>), ...(listeners as Record<string, unknown>) }
+            : undefined
+        }
+      />
     </div>
   );
 }
@@ -222,6 +262,7 @@ export function TrackList() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [reorderMode, setReorderMode] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
   // Android back-button integration:
@@ -270,16 +311,43 @@ export function TrackList() {
     count: filtered.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 72,
-    overscan: 4,
+    overscan: reorderMode ? 12 : 4,
   });
 
-  function moveBy(trackId: string, delta: number) {
-    const ids = ordered.map((t) => t.id);
-    const i = ids.indexOf(trackId);
-    const j = i + delta;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    setManual(ids);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const filteredIds = useMemo(() => filtered.map((t) => t.id), [filtered]);
+  const activeDragTrack = useMemo(
+    () => (activeDragId ? filtered.find((t) => t.id === activeDragId) ?? null : null),
+    [activeDragId, filtered],
+  );
+
+  function handleDragStart(e: DragStartEvent) {
+    setActiveDragId(String(e.active.id));
+  }
+
+  function handleDragEnd(e: DragEndEvent) {
+    setActiveDragId(null);
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    // Reorder using the visible filtered list, then merge back into the full ordered list.
+    const visibleIds = filtered.map((t) => t.id);
+    const from = visibleIds.indexOf(String(active.id));
+    const to = visibleIds.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    const newVisible = arrayMove(visibleIds, from, to);
+    // Rebuild full id list: replace visible positions in-order with newVisible.
+    const fullIds = ordered.map((t) => t.id);
+    const visibleSet = new Set(visibleIds);
+    let vi = 0;
+    const next = fullIds.map((id) => (visibleSet.has(id) ? newVisible[vi++] : id));
+    setManual(next);
   }
 
   return (
@@ -337,6 +405,16 @@ export function TrackList() {
       )}
 
       <div ref={parentRef} className="flex-1 overflow-y-auto px-4 pb-32">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDragId(null)}
+          autoScroll={{ threshold: { x: 0, y: 0.2 }, acceleration: 25 }}
+        >
+        <SortableContext items={filteredIds} strategy={verticalListSortingStrategy}>
         <div style={{ height: virtualizer.getTotalSize(), width: "100%", position: "relative" }}>
           {virtualizer.getVirtualItems().map((vi) => {
             const track = filtered[vi.index];
@@ -353,23 +431,35 @@ export function TrackList() {
                   paddingBottom: 8,
                 }}
               >
-                <TrackRow
+                <SortableTrackRow
                   track={track}
                   index={orderedIndex}
                   selected={selectedIds.has(track.id)}
                   onToggle={() => toggle(track.id)}
                   onOpenDetails={() => setDetailId(track.id)}
                   reorderMode={reorderMode}
-                  onMoveUp={() => moveBy(track.id, -1)}
-                  onMoveDown={() => moveBy(track.id, 1)}
-                  canMoveUp={orderedIndex > 0}
-                  canMoveDown={orderedIndex < ordered.length - 1}
                   compareTo={compareTo}
                 />
               </div>
             );
           })}
         </div>
+        </SortableContext>
+        <DragOverlay dropAnimation={{ duration: 180 }}>
+          {activeDragTrack ? (
+            <TrackRow
+              track={activeDragTrack}
+              index={orderedIndexById.get(activeDragTrack.id) ?? 0}
+              selected={selectedIds.has(activeDragTrack.id)}
+              onToggle={() => {}}
+              onOpenDetails={() => {}}
+              reorderMode={true}
+              compareTo={compareTo}
+              isDragging
+            />
+          ) : null}
+        </DragOverlay>
+        </DndContext>
         {filtered.length === 0 && (
           ordered.length === 0 ? (
             <EmptyState
