@@ -415,23 +415,18 @@ export function TrackList() {
           autoScroll={{ threshold: { x: 0, y: 0.2 }, acceleration: 25 }}
         >
         <SortableContext items={filteredIds} strategy={verticalListSortingStrategy}>
-        <div style={{ height: virtualizer.getTotalSize(), width: "100%", position: "relative" }}>
-          {virtualizer.getVirtualItems().map((vi) => {
-            const track = filtered[vi.index];
-            const orderedIndex = orderedIndexById.get(track.id) ?? vi.index;
-            return (
-              <div
-                key={track.id}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  transform: `translateY(${vi.start}px)`,
-                  paddingBottom: 8,
-                }}
-              >
+        {reorderMode ? (
+          // In reorder mode, render in normal flow so sibling rows can shift
+          // and open a gap for the dragged item (dnd-kit's transform-based
+          // animations require non-absolutely-positioned siblings to look
+          // correct). For libraries up to a few thousand tracks this remains
+          // smooth on Android WebView.
+          <div className="space-y-2">
+            {filtered.map((track, i) => {
+              const orderedIndex = orderedIndexById.get(track.id) ?? i;
+              return (
                 <SortableTrackRow
+                  key={track.id}
                   track={track}
                   index={orderedIndex}
                   selected={selectedIds.has(track.id)}
@@ -440,10 +435,40 @@ export function TrackList() {
                   reorderMode={reorderMode}
                   compareTo={compareTo}
                 />
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), width: "100%", position: "relative" }}>
+            {virtualizer.getVirtualItems().map((vi) => {
+              const track = filtered[vi.index];
+              const orderedIndex = orderedIndexById.get(track.id) ?? vi.index;
+              return (
+                <div
+                  key={track.id}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    transform: `translateY(${vi.start}px)`,
+                    paddingBottom: 8,
+                  }}
+                >
+                  <SortableTrackRow
+                    track={track}
+                    index={orderedIndex}
+                    selected={selectedIds.has(track.id)}
+                    onToggle={() => toggle(track.id)}
+                    onOpenDetails={() => setDetailId(track.id)}
+                    reorderMode={reorderMode}
+                    compareTo={compareTo}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        )}
         </SortableContext>
         <DragOverlay dropAnimation={{ duration: 180 }}>
           {activeDragTrack ? (
