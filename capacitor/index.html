@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" class="dark">
+<html lang="fr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -7,6 +7,25 @@
     <meta name="format-detection" content="telephone=no" />
     <title>TempoKey</title>
     <link rel="icon" type="image/png" href="./tempokey-logo.png" />
+    <script>
+      // Apply persisted theme before paint so #app's scoped colors match
+      // the user's preference (avoids light-mode flash of dark backgrounds
+      // and invisible text on the first frame).
+      (function () {
+        try {
+          var m = localStorage.getItem('tempokey:theme') || 'dark';
+          var r = m === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : m;
+          var c = document.documentElement.classList;
+          c.toggle('dark', r === 'dark');
+          c.toggle('light', r === 'light');
+          document.documentElement.style.colorScheme = r;
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <style>
       /* Boot-only colors. Scoped to the dark theme so the light theme can
          take over once React mounts (otherwise #app's id-specificity wins
