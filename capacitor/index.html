@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr" class="dark">
+<html lang="fr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -7,13 +7,37 @@
     <meta name="format-detection" content="telephone=no" />
     <title>TempoKey</title>
     <link rel="icon" type="image/png" href="./tempokey-logo.png" />
+    <script>
+      // Apply persisted theme before paint so #app's scoped colors match
+      // the user's preference (avoids light-mode flash of dark backgrounds
+      // and invisible text on the first frame).
+      (function () {
+        try {
+          var m = localStorage.getItem('tempokey:theme') || 'dark';
+          var r = m === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : m;
+          var c = document.documentElement.classList;
+          c.toggle('dark', r === 'dark');
+          c.toggle('light', r === 'light');
+          document.documentElement.style.colorScheme = r;
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <style>
-      html, body, #app { background:#0A0D14; color:#e6e8ee; }
+      /* Boot-only colors. Scoped to the dark theme so the light theme can
+         take over once React mounts (otherwise #app's id-specificity wins
+         over body's theme tokens, hiding text and forcing dark cards on
+         light backgrounds). */
       html, body { margin:0; padding:0; min-height:100dvh; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      html.dark, html.dark body, html.dark #app { background:#0A0D14; color:#e6e8ee; }
+      html.light, html.light body, html.light #app { background:#FAFBFC; color:#15192A; }
       /* Boot fallback — replaced by React mount */
-      #boot { position: fixed; inset: 0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; background:#0A0D14; }
+      #boot { position: fixed; inset: 0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:18px; background: inherit; }
       #boot img { width: 96px; height: 96px; object-fit: contain; filter: drop-shadow(0 8px 28px rgba(124,92,255,0.25)); animation: float 2.2s infinite ease-in-out; }
-      #boot small { color:#8a90a2; font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
+      #boot small { color: color-mix(in oklab, currentColor 60%, transparent); font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
       @keyframes float { 0%,100%{ transform: translateY(0); opacity:.92 } 50%{ transform: translateY(-4px); opacity:1 } }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
