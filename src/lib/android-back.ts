@@ -70,9 +70,19 @@ async function defaultBack(canGoBack: boolean): Promise<void> {
     dispatchEscape();
     return;
   }
-  // 2) Router history → back.
-  if (canGoBack && window.history.length > 1) {
-    window.history.back();
+  // 2) Router history → back, but only when we're not on the root route.
+  //    On the home screen, Android's expected behaviour is "double-tap to
+  //    quit" — never silently rewind a stale browser history entry, which
+  //    on a single-page app would either land on an empty state or crash
+  //    the WebView when the popped state references unmounted components.
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "/";
+  const atRoot = pathname === "/" || pathname === "" || pathname === "/index.html";
+  if (!atRoot && canGoBack && window.history.length > 1) {
+    try {
+      window.history.back();
+    } catch {
+      /* swallow — fall through to exit prompt */
+    }
     return;
   }
   // 3) Root → double-press to exit.
