@@ -14,6 +14,7 @@ import { buildPreview, TEMPLATES, TEMPLATE_VARIABLES, type TemplateId, type Rena
 import { isFsAccessSupported } from "@/lib/rename/dir-handle";
 import { applyRename, undoOperation, type ApplyProgress } from "@/lib/rename/engine";
 import { loadHistory, type RenameOperation } from "@/lib/rename/history";
+import { useBackHandler } from "@/hooks/useBackHandler";
 
 type Step = "select" | "template" | "preview" | "applying" | "done";
 
@@ -49,6 +50,25 @@ export function RenamePanel() {
   const settledCustomFormat = useSettledValue(customFormat);
 
   const fsSupported = isFsAccessSupported();
+
+  // Android back-button: step back through the wizard so the hardware back
+  // button never falls through to history.back() (which can crash the
+  // WebView when popping a stale single-page history entry).
+  useBackHandler(step !== "select" && step !== "applying", () => {
+    if (step === "done") {
+      resetWizard();
+      return true;
+    }
+    if (step === "preview") {
+      setStep("template");
+      return true;
+    }
+    if (step === "template") {
+      setStep("select");
+      return true;
+    }
+    return false;
+  });
 
   // Load history scoped to current library
   useEffect(() => {
