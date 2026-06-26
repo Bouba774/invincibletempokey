@@ -9,7 +9,6 @@ import {
 import { useAnalysisStore } from "@/lib/analysis-store";
 import { ImportProgressModal } from "@/components/ImportProgressModal";
 import {
-  FolderPlus,
   AudioWaveform,
   KeyRound,
   Disc3,
