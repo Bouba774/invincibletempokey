@@ -26,6 +26,22 @@ import {
   Headphones,
   ArrowUpRight,
 } from "lucide-react";
+import {
+  FolderSearch,
+  Sparkles,
+  ListMusic,
+  Gauge,
+  Music2,
+  Library,
+  Filter,
+  Layers,
+  Copy,
+  FileSignature,
+  FolderTree,
+  Hash,
+  Activity,
+  Radar,
+} from "lucide-react";
 import logoUrl from "@/assets/tempokey-logo.png";
 import {
   filesFromDirectoryHandle,
@@ -63,30 +79,87 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-const FEATURES = [
-  { icon: AudioWaveform, title: "Détection BPM", desc: "Tempo précis pour chaque morceau." },
-  { icon: KeyRound, title: "Tonalité", desc: "Analyse musicale automatique." },
-  { icon: Disc3, title: "Notation Camelot", desc: "Roue harmonique standard DJ." },
-  { icon: Waves, title: "Harmonic Mixing", desc: "Suggestions compatibles en un coup d'œil." },
-  { icon: ArrowDownUp, title: "Auto Mix Order", desc: "Tri intelligent pour enchaîner sans accroc." },
-  { icon: Blocks, title: "Set Builder", desc: "Warm-up, Peak, Closing structurés." },
-  { icon: Wand2, title: "Renommage intelligent", desc: "Templates DJ + undo complet." },
-  { icon: ScanSearch, title: "Doublons", desc: "Détection exacte et approximative." },
-  { icon: Telescope, title: "Recherche avancée", desc: "Filtres BPM, clé, durée, mots-clés." },
+const CATEGORIES = [
+  {
+    label: "Analyses musicales",
+    icon: Activity,
+    items: [
+      { icon: AudioWaveform, title: "BPM haute précision", desc: "Tempo décimal fiable." },
+      { icon: KeyRound, title: "Tonalité", desc: "Détection majeur / mineur." },
+      { icon: Disc3, title: "Notation Camelot", desc: "Roue harmonique standard." },
+      { icon: Waves, title: "Harmonic Mixing", desc: "Compatibilités instantanées." },
+      { icon: Radar, title: "Analyses avancées", desc: "Énergie, structure, qualité." },
+    ],
+  },
+  {
+    label: "Organisation",
+    icon: Layers,
+    items: [
+      { icon: ArrowDownUp, title: "Auto Mix Order", desc: "Enchaînements optimisés." },
+      { icon: Blocks, title: "Set Builder", desc: "Warm-up · Peak · Closing." },
+      { icon: Telescope, title: "Recherche avancée", desc: "BPM, clé, durée, mots." },
+      { icon: Filter, title: "Filtres puissants", desc: "Croisez tous les critères." },
+      { icon: ListMusic, title: "Préparation de sets", desc: "Playlists prêtes à jouer." },
+    ],
+  },
+  {
+    label: "Bibliothèque",
+    icon: Library,
+    items: [
+      { icon: ScanSearch, title: "Doublons", desc: "Exacts et approximatifs." },
+      { icon: Wand2, title: "Renommage intelligent", desc: "Templates DJ + undo." },
+      { icon: FolderTree, title: "Réorganisation locale", desc: "Sur vos vrais fichiers." },
+      { icon: Hash, title: "Préfixes d'ordre", desc: "Conservez l'ordre du mix." },
+      { icon: HardDrive, title: "Grandes bibliothèques", desc: "Pensé pour le volume." },
+    ],
+  },
 ];
 
 const BENEFITS = [
+  { icon: Gauge, label: "Analyse BPM & tonalités" },
+  { icon: ArrowDownUp, label: "Classement intelligent" },
+  { icon: Waves, label: "Harmonic Mixing" },
+  { icon: Blocks, label: "Set Builder" },
+  { icon: ScanSearch, label: "Détection doublons" },
+  { icon: FolderTree, label: "Réorganisation locale" },
   { icon: LockKeyhole, label: "100% local" },
-  { icon: PlugZap, label: "Aucune connexion" },
+  { icon: PlugZap, label: "Hors connexion" },
   { icon: CloudOff, label: "Zéro cloud" },
   { icon: HardDrive, label: "Bibliothèques massives" },
   { icon: Headphones, label: "Pensé pour DJs" },
 ];
 
 const STEPS = [
-  { n: 1, title: "Importez un dossier", desc: "Sélectionnez votre bibliothèque audio locale." },
-  { n: 2, title: "Analysez vos morceaux", desc: "BPM, tonalité et Camelot calculés en arrière-plan." },
-  { n: 3, title: "Construisez vos mixes", desc: "Auto-order, Set Builder et harmonic mixing." },
+  {
+    n: 1,
+    icon: FolderSearch,
+    title: "Sélectionnez un dossier",
+    desc: "Choisissez le dossier contenant vos fichiers audio.",
+  },
+  {
+    n: 2,
+    icon: Sparkles,
+    title: "Analyse automatique",
+    desc: "BPM, tonalités, Camelot et infos musicales en arrière-plan.",
+  },
+  {
+    n: 3,
+    icon: ListMusic,
+    title: "Organisez et mixez",
+    desc: "Classement intelligent, Set Builder, Harmonic Mixing, recherche et renommage.",
+  },
+];
+
+const ADVANCED = [
+  { icon: AudioWaveform, label: "Détection BPM avancée" },
+  { icon: KeyRound, label: "Détection de tonalité" },
+  { icon: Disc3, label: "Camelot" },
+  { icon: Waves, label: "Harmonic Mixing" },
+  { icon: Telescope, label: "Recherche multicritère" },
+  { icon: ArrowDownUp, label: "Classement intelligent" },
+  { icon: Wand2, label: "Renommage DJ" },
+  { icon: ScanSearch, label: "Suppression doublons" },
+  { icon: Music2, label: "Optimisation bibliothèque" },
 ];
 
 function Home() {
@@ -293,13 +366,17 @@ function Home() {
             />
           </div>
           <h1 className="font-display font-bold tracking-tight text-foreground text-[clamp(1.6rem,7vw,2.5rem)] leading-[1.05]">
-            TempoKey
+            Analysez votre musique
+            <br />
+            en un dossier.
           </h1>
-          <p className="mx-auto mt-3 w-full max-w-[min(92%,320px)] text-[clamp(12.5px,3.6vw,15px)] font-medium text-foreground/90 leading-snug text-balance">
-            Analysez, organisez et optimisez votre bibliothèque DJ — localement.
+          <p className="mx-auto mt-3 w-full max-w-[min(94%,360px)] text-[clamp(12.5px,3.6vw,15px)] font-medium text-foreground/90 leading-snug text-balance">
+            Sélectionnez un dossier contenant votre musique — TempoKey détecte
+            automatiquement BPM, tonalités, notation Camelot et compatibilités
+            de mix.
           </p>
-          <p className="mx-auto mt-1.5 w-full max-w-[min(92%,320px)] text-[clamp(11px,3.2vw,13px)] text-muted-foreground leading-snug text-balance">
-            BPM, tonalités, Camelot, Harmonic Mixing.
+          <p className="mx-auto mt-1.5 w-full max-w-[min(94%,340px)] text-[clamp(11px,3.2vw,13px)] text-muted-foreground leading-snug text-balance">
+            100% local · hors connexion · zéro cloud.
           </p>
 
           <div className="mt-6 w-full max-w-[min(100%,340px)] space-y-3">
@@ -308,8 +385,8 @@ function Home() {
               className="press shine relative flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl text-[clamp(13px,3.6vw,15px)] font-semibold text-[var(--primary-foreground)] animate-fade-in"
               style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-glow)" }}
             >
-              <FolderPlus className="h-[18px] w-[18px] shrink-0" />
-              <span className="truncate">Importer une bibliothèque audio</span>
+              <FolderSearch className="h-[18px] w-[18px] shrink-0" />
+              <span className="truncate">Sélectionner un dossier à analyser</span>
             </button>
           </div>
         </div>
@@ -350,76 +427,166 @@ function Home() {
                 <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-foreground" />
               </div>
             </button>
-          ) : (
-            <div className="rounded-2xl border border-border bg-[var(--surface-elevated)] p-5">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Premiers pas
-              </div>
-              <h2 className="mt-1 font-display text-lg font-semibold tracking-tight">
-                Démarrer en 3 étapes
-              </h2>
-              <ol className="mt-4 space-y-3">
-                {STEPS.map((s) => (
-                  <li key={s.n} className="flex items-start gap-3">
-                    <span
-                      className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-[12px] font-bold text-[var(--primary-foreground)]"
-                      style={{ background: "var(--gradient-primary)" }}
-                    >
-                      {s.n}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">{s.title}</div>
-                      <div className="text-xs text-muted-foreground leading-relaxed">{s.desc}</div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
+          ) : null}
         </div>
       </section>
 
-      {/* FEATURES */}
+      {/* HOW IT WORKS */}
       <section className="px-6 pt-10">
         <div className="mx-auto max-w-xl">
           <div className="mb-4 flex items-baseline justify-between">
-            <h2 className="font-display text-lg font-semibold tracking-tight">Fonctionnalités</h2>
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              Comment ça fonctionne
+            </h2>
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              3 étapes
+            </span>
+          </div>
+          <ol className="space-y-2.5">
+            {STEPS.map((s) => {
+              const Icon = s.icon;
+              return (
+                <li
+                  key={s.n}
+                  className="hover-lift relative flex items-start gap-3 rounded-2xl border border-border bg-[var(--surface-elevated)] p-4"
+                  style={{ boxShadow: "var(--shadow-card)" }}
+                >
+                  <div
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[var(--primary-foreground)]"
+                    style={{ background: "var(--gradient-primary)" }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">
+                        Étape {s.n}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-sm font-semibold text-foreground">
+                      {s.title}
+                    </div>
+                    <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      {s.desc}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </section>
+
+      {/* CATEGORIES */}
+      <section className="px-6 pt-10">
+        <div className="mx-auto max-w-xl space-y-6">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              Fonctionnalités
+            </h2>
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Tout en local
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {FEATURES.map((f) => {
-              const Icon = f.icon;
-              return (
-                <div
-                  key={f.title}
-                  className="hover-lift group rounded-xl border border-border bg-[var(--surface-elevated)] p-3 hover:border-[var(--primary)]/40"
-                >
-                  <div
-                    className="grid h-8 w-8 place-items-center rounded-lg text-[var(--accent)] transition-colors group-hover:text-[var(--primary-glow)]"
-                    style={{
-                      background:
-                        "color-mix(in oklab, var(--accent) 12%, transparent)",
-                    }}
+          {CATEGORIES.map((cat) => {
+            const CatIcon = cat.icon;
+            return (
+              <div key={cat.label}>
+                <div className="mb-2.5 flex items-center gap-2">
+                  <span
+                    className="grid h-7 w-7 place-items-center rounded-lg text-[var(--primary-foreground)]"
+                    style={{ background: "var(--gradient-primary)" }}
                   >
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="mt-2 text-[13px] font-semibold text-foreground">
-                    {f.title}
-                  </div>
-                  <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                    {f.desc}
-                  </div>
+                    <CatIcon className="h-3.5 w-3.5" />
+                  </span>
+                  <h3 className="font-display text-[15px] font-semibold tracking-tight">
+                    {cat.label}
+                  </h3>
                 </div>
-              );
-            })}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {cat.items.map((f) => {
+                    const Icon = f.icon;
+                    return (
+                      <div
+                        key={f.title}
+                        className="hover-lift group rounded-xl border border-border bg-[var(--surface-elevated)] p-3 hover:border-[var(--primary)]/40"
+                      >
+                        <div
+                          className="grid h-8 w-8 place-items-center rounded-lg text-[var(--accent)] transition-colors group-hover:text-[var(--primary-glow)]"
+                          style={{
+                            background:
+                              "color-mix(in oklab, var(--accent) 12%, transparent)",
+                          }}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div className="mt-2 text-[13px] font-semibold text-foreground">
+                          {f.title}
+                        </div>
+                        <div className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                          {f.desc}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* SMART RENAMING SPOTLIGHT */}
+      <section className="px-6 pt-10">
+        <div className="mx-auto max-w-xl">
+          <div
+            className="overflow-hidden rounded-2xl border border-border p-5"
+            style={{
+              background:
+                "linear-gradient(135deg, color-mix(in oklab, var(--accent) 10%, var(--surface-elevated)), var(--surface-elevated))",
+              boxShadow: "var(--shadow-card)",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="grid h-8 w-8 place-items-center rounded-lg text-[var(--primary-foreground)]"
+                style={{ background: "var(--gradient-primary)" }}
+              >
+                <FileSignature className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">
+                  Renommage intelligent
+                </div>
+                <h2 className="font-display text-base font-semibold tracking-tight">
+                  L'ordre du mix dans vos fichiers
+                </h2>
+              </div>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+              TempoKey ajoute automatiquement des préfixes aux noms de fichiers
+              pour conserver l'ordre de lecture directement dans l'explorateur
+              et dans les lecteurs DJ.
+            </p>
+            <div className="mt-4 space-y-1.5 rounded-xl border border-border bg-[var(--surface)] p-3 font-mono text-[11px] leading-relaxed">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span className="opacity-60">avant</span>
+                <span className="truncate">track_final_v2.mp3</span>
+              </div>
+              <div className="flex items-center gap-2 text-foreground">
+                <span className="font-semibold text-[var(--accent)]">après</span>
+                <span className="truncate">
+                  <span className="text-[var(--primary-glow)]">01 — 124 BPM — 8A —</span>{" "}
+                  track_final_v2.mp3
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       {/* BENEFITS */}
-      <section className="px-6 pt-10 pb-14">
+      <section className="px-6 pt-10">
         <div className="mx-auto max-w-xl">
           <div
             className="rounded-2xl border border-border p-5"
@@ -432,7 +599,7 @@ function Home() {
               Pourquoi TempoKey
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Un outil pensé pour les DJs qui travaillent avec de grandes collections.
+              Tout ce dont vous avez besoin pour préparer vos sets — sans cloud.
             </p>
             <ul className="mt-4 flex flex-wrap gap-2">
               {BENEFITS.map((b) => {
@@ -449,7 +616,45 @@ function Home() {
               })}
             </ul>
           </div>
-          <p className="mt-6 text-center text-[11px] text-muted-foreground">
+        </div>
+      </section>
+
+      {/* ADVANCED */}
+      <section className="px-6 pt-10 pb-14">
+        <div className="mx-auto max-w-xl">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              Fonctionnalités avancées
+            </h2>
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Pro
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {ADVANCED.map((a) => {
+              const Icon = a.icon;
+              return (
+                <div
+                  key={a.label}
+                  className="hover-lift flex flex-col items-center gap-1.5 rounded-xl border border-border bg-[var(--surface-elevated)] p-3 text-center"
+                >
+                  <span
+                    className="grid h-8 w-8 place-items-center rounded-lg text-[var(--accent)]"
+                    style={{
+                      background:
+                        "color-mix(in oklab, var(--accent) 12%, transparent)",
+                    }}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="text-[10.5px] font-medium leading-tight text-foreground">
+                    {a.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-8 text-center text-[11px] text-muted-foreground">
             Vos fichiers ne quittent jamais votre appareil.
           </p>
         </div>
