@@ -362,11 +362,13 @@ function SettingsPage() {
         <Section title="À propos" icon={<Info className="h-3.5 w-3.5" />}>
           <Card>
             <div className="p-5 flex items-center gap-4">
-              <div
-                className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl text-primary-foreground"
-                style={{ background: "var(--gradient-primary)" }}
-              >
-                <Music2 className="h-6 w-6" />
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-[var(--surface-elevated)]">
+                <img
+                  src={tempoKeyLogo}
+                  alt="TempoKey"
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                />
               </div>
               <div className="min-w-0">
                 <div className="text-base font-semibold tracking-tight">TempoKey</div>
@@ -376,11 +378,24 @@ function SettingsPage() {
               </div>
             </div>
             <div className="border-t border-border/60">
-              <MetaRow
-                icon={<User className="h-4 w-4" />}
-                label="Créé par"
-                value="DJ LAMBO Premier"
-              />
+              <div className="flex items-center gap-4 px-5 py-3.5 border-b border-border/60">
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-black">
+                  <img
+                    src={djLamboLogo}
+                    alt="DJ LAMBO Premier"
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.1em] font-semibold text-muted-foreground">
+                    Créé par
+                  </div>
+                  <div className="mt-0.5 text-sm font-medium text-foreground">
+                    DJ LAMBO Premier
+                  </div>
+                </div>
+              </div>
               <ContactRow email="djlambopremierofficiel@gmail.com" />
             </div>
           </Card>
