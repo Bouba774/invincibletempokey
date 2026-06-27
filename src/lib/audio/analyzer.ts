@@ -11,6 +11,7 @@ import {
   pickSegments,
 } from "./preprocess";
 import { getEssentia, freeVectors, type EssentiaInstance } from "./essentia-engine";
+import { analyzeBpmFusion } from "./bpm-fusion";
 
 let ctx: AudioContext | null = null;
 function getCtx(): AudioContext {
@@ -55,139 +56,9 @@ export interface AnalyzeOptions {
 // Essentia-powered analysis pipeline.
 // ---------------------------------------------------------------------------
 
-const DJ_PREF_MIN = 85;
-const DJ_PREF_MAX = 175;
-
 function humanKeyLabel(note: string, scale: "major" | "minor"): string {
   const cap = scale === "major" ? "Major" : "Minor";
   return `${note} ${cap}`;
-}
-
-/**
- * Run RhythmExtractor2013 with the "multifeature" method (the same algorithm
- * used by AcousticBrainz / Essentia's batch tools, comparable in accuracy to
- * Mixed In Key for steady-tempo material) and resolve half / double tempo
- * ambiguity by scoring ×0.5, ×1 and ×2 candidates.
- */
-function essentiaBpm(
-  essentia: EssentiaInstance,
-  samples: Float32Array,
-): { bpm: number; confidence: number; ticks: number; intervals: number[] } | null {
-  const buf = new Float32Array(samples.length);
-  buf.set(samples);
-  const vec = essentia.arrayToVector(buf);
-  try {
-    const out = essentia.RhythmExtractor2013(vec, 208, "multifeature", 40);
-    const intervals: number[] = [];
-    if (out.bpmIntervals) {
-      const n = out.bpmIntervals.size();
-      for (let i = 0; i < n; i++) intervals.push(out.bpmIntervals.get(i));
-    }
-    const ticks = out.ticks ? out.ticks.size() : 0;
-    const result = {
-      bpm: out.bpm,
-      // RhythmExtractor2013 returns confidence in [0..5.3] (5.3 ≈ perfect).
-      // Normalise to [0..1] for our UI.
-      confidence: Math.max(0, Math.min(1, out.confidence / 3.5)),
-      ticks,
-      intervals,
-    };
-    freeVectors(out.ticks, out.estimates, out.bpmIntervals);
-    return result;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("[essentia] RhythmExtractor2013 failed:", e);
-    return null;
-  } finally {
-    freeVectors(vec);
-  }
-}
-
-/**
- * Cross-validation tempo estimator. Percival's algorithm is fast and very
- * reliable on the octave (it tends to lock on the "perceptual" pulse used
- * by DJ apps), so we use it as a tiebreaker for half/double tempo cases.
- */
-function essentiaBpmPercival(
-  essentia: EssentiaInstance,
-  samples: Float32Array,
-): number | null {
-  const buf = new Float32Array(samples.length);
-  buf.set(samples);
-  const vec = essentia.arrayToVector(buf);
-  try {
-    const out = essentia.PercivalBpmEstimator(vec, 1024, 2048, 128, 128, 210, 50, 44100);
-    return out.bpm > 0 ? out.bpm : null;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn("[essentia] PercivalBpmEstimator failed:", e);
-    return null;
-  } finally {
-    freeVectors(vec);
-  }
-}
-
-/** Coefficient of variation of the inter-beat intervals (lower = steadier). */
-function intervalsCv(intervals: number[]): number {
-  if (intervals.length < 4) return 1;
-  let mean = 0;
-  for (const v of intervals) mean += v;
-  mean /= intervals.length;
-  if (mean <= 0) return 1;
-  let varSum = 0;
-  for (const v of intervals) varSum += (v - mean) * (v - mean);
-  return Math.sqrt(varSum / intervals.length) / mean;
-}
-
-/**
- * Decide between BPM, BPM×2 and BPM/2. We trust Essentia's raw value
- * whenever it lands inside the DJ-friendly window with high confidence;
- * otherwise we lean toward the octave that falls into [85, 175] BPM.
- */
-function resolveOctave(
-  bpm: number,
-  confidence: number,
-  intervalsCvValue: number,
-  reference: number | null,
-): { bpm: number; corrected: boolean } {
-  const candidates = [
-    { bpm: bpm * 0.5, w: 0.85 },
-    { bpm, w: 1.0 },
-    { bpm: bpm * 2, w: 0.85 },
-    { bpm: bpm * (2 / 3), w: 0.6 },
-    { bpm: bpm * 1.5, w: 0.6 },
-  ];
-  let bestBpm = bpm;
-  let bestScore = -Infinity;
-  let chosenIdx = 1;
-  candidates.forEach((c, idx) => {
-    if (c.bpm < 40 || c.bpm > 220) return;
-    const inDjWindow = c.bpm >= DJ_PREF_MIN && c.bpm <= DJ_PREF_MAX ? 1 : 0.55;
-    const stability = 1 - Math.min(0.5, intervalsCvValue);
-    // Cross-validation bonus: if Percival's estimate matches this candidate
-    // (within ~3 %), strongly prefer it. This single check is what makes the
-    // engine match Rekordbox / Serato on tricky half-time tracks.
-    let refBonus = 1;
-    if (reference != null && reference > 0) {
-      const ratio = c.bpm / reference;
-      const closeness = Math.abs(ratio - 1);
-      if (closeness < 0.03) refBonus = 1.6;
-      else if (closeness < 0.06) refBonus = 1.25;
-      else refBonus = 0.9;
-    }
-    const score =
-      c.w *
-      inDjWindow *
-      (0.5 + 0.5 * confidence) *
-      (0.6 + 0.4 * stability) *
-      refBonus;
-    if (score > bestScore) {
-      bestScore = score;
-      bestBpm = c.bpm;
-      chosenIdx = idx;
-    }
-  });
-  return { bpm: bestBpm, corrected: chosenIdx !== 1 };
 }
 
 function essentiaKey(
@@ -270,32 +141,18 @@ async function analyzeWithEssentia(
 ): Promise<{
   bpm: number;
   bpmConfidence: number;
+  bpmCandidates: { bpm: number; score: number }[];
   keyNote: string;
   keyScale: "major" | "minor";
   keyConfidence: number;
 } | null> {
   // -----------------------------------------------------------------------
-  // BPM: run RhythmExtractor2013 + PercivalBpmEstimator on the whole
-  // (trimmed, normalised) signal and use Percival as octave reference.
+  // BPM: multi-algorithm fusion (RhythmExtractor2013 + PercivalBpmEstimator
+  // + LoopBpmEstimator when available + beat-interval estimator) computed
+  // on the full track and on 4 representative segments. See bpm-fusion.ts.
   // -----------------------------------------------------------------------
-  const rhythm = essentiaBpm(essentia, mono44k);
-  if (!rhythm) return null;
-  await new Promise<void>((r) => setTimeout(r, 0));
-  const percival = essentiaBpmPercival(essentia, mono44k);
-  const cv = intervalsCv(rhythm.intervals);
-  const resolved = resolveOctave(rhythm.bpm, rhythm.confidence, cv, percival);
-  const steadiness = 1 - Math.min(0.5, cv);
-  // Cross-validation bonus: agreement with Percival lifts confidence.
-  let agreement = 0;
-  if (percival) {
-    const r = resolved.bpm / percival;
-    if (Math.abs(r - 1) < 0.03) agreement = 0.25;
-    else if (Math.abs(r - 1) < 0.06) agreement = 0.1;
-  }
-  const bpmConfidence = Math.max(
-    0,
-    Math.min(1, 0.55 * rhythm.confidence + 0.25 * steadiness + agreement),
-  );
+  const fusion = await analyzeBpmFusion(essentia, mono44k, sampleRate);
+  if (!fusion) return null;
 
   // -----------------------------------------------------------------------
   // Key: run KeyExtractor with three complementary key profiles
@@ -339,8 +196,9 @@ async function analyzeWithEssentia(
   }
 
   return {
-    bpm: Math.round(resolved.bpm * 100) / 100,
-    bpmConfidence: Math.round(bpmConfidence * 100) / 100,
+    bpm: Math.round(fusion.bpm * 100) / 100,
+    bpmConfidence: fusion.confidence,
+    bpmCandidates: fusion.candidates.map((c) => ({ bpm: c.bpm, score: c.score })),
     keyNote: voted.note,
     keyScale: voted.scale,
     keyConfidence: Math.round(voted.confidence * 100) / 100,
@@ -393,11 +251,9 @@ export async function analyzeFile(
         keyLabel = humanKeyLabel(res.keyNote, res.keyScale);
         camelot = camelotFor(res.keyNote, res.keyScale);
         keyConfidence = res.keyConfidence;
-        bpmCandidates = [
-          { bpm: Math.round(res.bpm * 10) / 10, score: 1 },
-          { bpm: Math.round(res.bpm * 20) / 10, score: 0.5 },
-          { bpm: Math.round(res.bpm * 5) / 10, score: 0.5 },
-        ];
+        bpmCandidates = res.bpmCandidates.length
+          ? res.bpmCandidates
+          : [{ bpm: res.bpm, score: 1 }];
         usedEssentia = true;
       }
     }
