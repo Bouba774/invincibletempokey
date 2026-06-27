@@ -36,6 +36,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { usePlayerStore } from "@/lib/audio/player-store";
 import { useLibraryStore, type Track } from "@/lib/library-store";
 import { useOrderingStore, useOrderedTracks } from "@/lib/ordering-store";
+import { useAnalysisStore } from "@/lib/analysis-store";
 import { FilterSheet } from "./FilterSheet";
 import { TrackDetailSheet } from "./TrackDetailSheet";
 import { CamelotBadge } from "./viz/CamelotBadge";
@@ -252,9 +253,43 @@ export function TrackList() {
   const selectedIds = useLibraryStore((s) => s.selectedIds);
   const toggle = useLibraryStore((s) => s.toggleSelected);
   const clear = useLibraryStore((s) => s.clearSelection);
-  const ordered = useOrderedTracks();
+  const orderedLive = useOrderedTracks();
   const active = useOrderingStore((s) => s.active);
   const setManual = useOrderingStore((s) => s.setManual);
+  const analysisRunning = useAnalysisStore((s) => s.running);
+
+  // Freeze visible row positions while analysis is running so that
+  // computed orders (bpm-asc, camelot, energy…) don't reshuffle rows on
+  // every track update — that "dancing" makes the list feel unstable and
+  // wastes WebView paint budget. Track data still updates in place; only
+  // the position is held until the run finishes.
+  const frozenIdsRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (analysisRunning) {
+      if (!frozenIdsRef.current) {
+        frozenIdsRef.current = orderedLive.map((t) => t.id);
+      }
+    } else {
+      frozenIdsRef.current = null;
+    }
+  }, [analysisRunning, orderedLive]);
+
+  const ordered = useMemo<Track[]>(() => {
+    const frozen = analysisRunning ? frozenIdsRef.current : null;
+    if (!frozen) return orderedLive;
+    const byId = new Map(orderedLive.map((t) => [t.id, t] as const));
+    const out: Track[] = [];
+    const seen = new Set<string>();
+    for (const id of frozen) {
+      const t = byId.get(id);
+      if (t) {
+        out.push(t);
+        seen.add(id);
+      }
+    }
+    for (const t of orderedLive) if (!seen.has(t.id)) out.push(t);
+    return out;
+  }, [analysisRunning, orderedLive]);
 
   const [query, setQuery] = useState("");
   const [settledQuery, setSettledQuery] = useState("");
