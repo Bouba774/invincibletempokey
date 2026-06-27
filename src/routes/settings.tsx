@@ -25,6 +25,8 @@ import {
 import { Copy, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import tempoKeyLogo from "@/assets/tempokey-logo.png";
+import djLamboLogo from "@/assets/dj-lambo-premier.png";
 import { useThemeStore } from "@/lib/theme-store";
 import { useSettingsStore } from "@/lib/settings-store";
 import { useLibraryStore } from "@/lib/library-store";
