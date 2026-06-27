@@ -586,7 +586,8 @@ function ContactRow({ email }: { email: string }) {
         </div>
         <a
           href={`mailto:${email}`}
-          className="mt-0.5 block text-sm font-medium text-primary hover:underline break-all"
+          className="mt-0.5 block font-medium text-primary hover:underline whitespace-nowrap overflow-hidden text-ellipsis text-[clamp(10px,3.1vw,13px)]"
+          title={email}
         >
           {email}
         </a>
